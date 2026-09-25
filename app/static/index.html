@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Mailaya classe vos messages Gmail localement avec LAYA.">
+    <meta name="theme-color" content="#663052">
+    <title>Mailaya</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Anybody:wdth,wght@75..125,400..800&family=Geologica:wght@300..800&display=swap" rel="stylesheet">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23663052'/%3E%3Cpath d='M15 46V18h7l10 13 10-13h7v28h-7V29L32 41 22 29v17z' fill='%23f6b792'/%3E%3C/svg%3E">
+    <link rel="stylesheet" href="/static/app.css">
+    <script src="/static/app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#results">Aller aux résultats</a>
+    <header class="topbar">
+      <div class="identity">
+        <p class="eyebrow"><span class="brand-mark" aria-hidden="true">M</span><span>MAILAYA <span aria-hidden="true">/</span> TRI LOCAL</span></p>
+        <h1>Vos mails, <span>mis au clair.</span></h1>
+        <p>Catégorie, priorité, spam et action attendue. LAYA fait le tri localement.</p>
+      </div>
+      <div class="promise" aria-label="Caractéristiques du traitement">
+        <span class="promise-mark" aria-hidden="true">✓</span>
+        <div>
+          <strong>Un tri lisible.</strong>
+          <span id="model-copy">Traitement local sur Apple Silicon</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="results" id="results" aria-labelledby="results-heading">
+        <div class="results-toolbar">
+          <div>
+            <h2 id="results-heading">Messages analysés</h2>
+            <p id="results-summary">Lancez une démonstration pour découvrir le classement.</p>
+          </div>
+          <label class="filter-control">
+            <span>Afficher</span>
+            <select id="category-filter">
+              <option value="all">Toutes les catégories</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Expéditeur</th>
+                <th scope="col">Objet</th>
+                <th scope="col">Catégorie</th>
+                <th scope="col">Priorité</th>
+                <th scope="col">Spam</th>
+                <th scope="col">Action</th>
+                <th scope="col">Temps</th>
+              </tr>
+            </thead>
+            <tbody id="mail-rows"></tbody>
+          </table>
+          <div class="empty-state" id="empty-state">
+            <span class="empty-index">01</span>
+            <div>
+              <h3>Commencez par un échantillon</h3>
+              <p>Le mode démonstration reproduit le parcours complet sans accéder à votre messagerie.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="execution" aria-labelledby="execution-heading">
+        <div class="execution-title">
+          <h2 id="execution-heading">Exécution</h2>
+          <span class="run-status" id="run-status" data-state="idle">Au repos</span>
+        </div>
+
+        <form id="run-form">
+          <div class="field-grid">
+            <label>
+              <span>Source</span>
+              <select id="source" name="source">
+                <option value="demo">Démonstration</option>
+                <option value="gmail">Gmail</option>
+              </select>
+            </label>
+            <label>
+              <span>Nombre de mails</span>
+              <select id="limit" name="limit">
+                <option value="12">12</option>
+                <option value="50">50</option>
+                <option value="100" selected>100</option>
+                <option value="500">500</option>
+              </select>
+            </label>
+          </div>
+          <label class="date-field">
+            <span>Traiter les messages depuis</span>
+            <input id="since-date" name="since_date" type="date" required>
+          </label>
+
+          <div class="auth-panel" id="auth-panel" hidden>
+            <div id="auth-copy"></div>
+            <button class="secondary-button" id="connect-button" type="button">Connecter le compte</button>
+          </div>
+
+          <button class="primary-button" id="run-button" type="submit">
+            <span id="run-button-label">Lancer l’analyse</span>
+            <span aria-hidden="true">→</span>
+          </button>
+        </form>
+
+        <div class="run-actions">
+          <button class="text-button" id="new-run" type="button">Nouvelle exécution</button>
+          <button class="text-button" id="clear-results" type="button">Effacer les résultats</button>
+        </div>
+
+        <section class="progress-section" aria-labelledby="progress-heading">
+          <div class="section-label">
+            <h3 id="progress-heading">Progression</h3>
+            <span id="progress-percent">0 %</span>
+          </div>
+          <p class="progress-count"><strong id="processed-count">0</strong><span id="total-count"> sur 0</span></p>
+          <div class="progress-track" role="progressbar" aria-label="Messages traités" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <span id="progress-bar"></span>
+          </div>
+          <div class="progress-foot">
+            <span id="remaining-count">0 restant</span>
+            <span id="failed-count">0 échec</span>
+          </div>
+        </section>
+
+        <section class="metrics" aria-label="Mesures de performance">
+          <div><span>Durée</span><strong id="duration-metric">0 s</strong></div>
+          <div><span>Moyenne</span><strong id="average-metric">0 ms</strong></div>
+          <div><span>Par seconde</span><strong id="rate-metric">0</strong></div>
+          <div><span>p95</span><strong id="p95-metric">0 ms</strong></div>
+        </section>
+
+        <section class="category-summary" aria-labelledby="category-heading">
+          <div class="section-label">
+            <h3 id="category-heading">Matrice de catégories</h3>
+            <span id="category-total">0 classé</span>
+          </div>
+          <div id="category-bars" class="category-bars"></div>
+        </section>
+
+        <p class="system-note" id="system-note" role="status" aria-live="polite">Prêt pour une démonstration locale.</p>
+      </aside>
+    </main>
+  </body>
+</html>
