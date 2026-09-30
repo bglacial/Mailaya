@@ -6,3 +6,6 @@ data/
 __pycache__/
 .pytest_cache/
 *.pyc
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
