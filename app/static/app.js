@@ -472,7 +472,9 @@ $("category-filter").addEventListener("change", () => renderRows(state.dashboard
 $("imap-account").addEventListener("change", () => { if (state.dashboard) renderDashboard(state.dashboard); });
 $("clear-results").addEventListener("click", clearResults);
 $("new-run").addEventListener("click", () => {
-  if (["queued", "fetching", "running"].includes(state.dashboard?.run?.status)) return;
+  if (!state.dashboard || ["queued", "fetching", "running"].includes(state.dashboard.run?.status)) return;
+  state.generation += 1;
+  renderDashboard({ ...state.dashboard, run: null, emails: [], metrics: {} });
   $("since-date").focus();
   $("system-note").textContent = "Réglez la source, la date et le volume, puis relancez l’analyse.";
 });
