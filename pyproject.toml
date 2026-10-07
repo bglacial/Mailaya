@@ -1,7 +1,7 @@
 [project]
 name = "mailaya"
-version = "0.1.0"
-description = "Triage local de messages Gmail avec LAYA MLX"
+version = "0.2.0"
+description = "Triage local de messages Gmail avec Julia/PyTorch ou LAYA MLX"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -15,6 +15,20 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<9"]
+julia = [
+  "torch>=2.6",
+  "supersonic-julia @ git+https://huggingface.co/SupersonicLabs/Julia-1@a85b127321d580d65176c89ced8273f305745d85",
+  "huggingface-hub>=0.34,<2",
+]
+
+# On Linux, uv installs the CPU wheel rather than the CUDA dependency stack.
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [build-system]
 requires = ["setuptools>=75"]

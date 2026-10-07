@@ -6,6 +6,7 @@ import math
 import re
 import threading
 import time
+from pathlib import Path
 from typing import Any, Protocol
 
 from .config import Settings
@@ -52,8 +53,13 @@ QUESTIONS = {
 
 class Classifier(Protocol):
     name: str
+    model: str | None
 
     def classify(self, email: dict[str, Any]) -> dict[str, Any]: ...
+
+
+class ClassifierLoadError(RuntimeError):
+    """A model cannot load; stop the run instead of failing every message."""
 
 
 def _clamp_probability(value: Any) -> float:
@@ -98,6 +104,7 @@ class LayaClassifier:
 
     def __init__(self, settings: Settings):
         self.settings = settings
+        self.model = settings.laya_model
         self._agent: Any = None
         self._load_lock = threading.Lock()
 
@@ -140,8 +147,72 @@ class LayaClassifier:
         }
 
 
+class JuliaClassifier:
+    name = "julia-pytorch"
+
+    def __init__(self, settings: Settings):
+        self.settings = settings
+        self.model = settings.julia_model
+        self._agent: Any = None
+        self._load_lock = threading.Lock()
+
+    def _load(self) -> Any:
+        if self._agent is not None:
+            return self._agent
+        with self._load_lock:
+            if self._agent is None:
+                try:
+                    from julia import load_model
+                    from huggingface_hub import snapshot_download
+                except ImportError as exc:
+                    raise ClassifierLoadError(
+                        "Le moteur Julia n'est pas installé. Exécutez uv sync --extra julia."
+                    ) from exc
+                try:
+                    local_path = Path(self.model).expanduser()
+                    checkpoint = str(local_path.resolve()) if local_path.is_dir() else snapshot_download(
+                        repo_id=self.model,
+                        revision=self.settings.julia_revision,
+                        allow_patterns=["*.json", "encoder/*.json", "tokenizer/*", "*.safetensors"],
+                    )
+                    self._agent = load_model(
+                        checkpoint,
+                        device=self.settings.julia_device,
+                        backend="torch",
+                        strict_encoding=True,
+                        max_length=8192,
+                        head_length=512,
+                        marker_only_head=False,
+                    )
+                except Exception as exc:
+                    raise ClassifierLoadError(f"Impossible de charger Julia ({self.model}) : {exc}") from exc
+        return self._agent
+
+    def classify(self, email: dict[str, Any]) -> dict[str, Any]:
+        state = {
+            "expéditeur": f"{email['sender_name']} <{email['sender_address']}>",
+            "objet": email["subject"],
+            "contenu": email["body_preview"],
+        }
+        agent = self._load()
+        started = time.perf_counter()
+        prediction = agent.predict(state=state, questions=QUESTIONS)
+        duration_ms = (time.perf_counter() - started) * 1000
+        answers = prediction["answers"]
+        category, category_scores = _extract_choice(answers["category"])
+        return {
+            "category": category,
+            "category_scores": category_scores,
+            "priority_score": _extract_score(answers["priority"]),
+            "spam_score": round(_extract_noul(answers["spam"]) * 100, 1),
+            "action_score": round(_extract_noul(answers["action"]) * 100, 1),
+            "duration_ms": round(duration_ms, 1),
+        }
+
+
 class DemoClassifier:
     name = "demonstration"
+    model = None
 
     _category_keywords = {
         "Finance": ("facture", "paiement", "prélèvement", "€", "rembourse"),
@@ -181,9 +252,17 @@ class DemoClassifier:
 
 
 def build_classifier(settings: Settings) -> Classifier:
-    wants_laya = settings.laya_backend == "laya" or (
-        settings.laya_backend == "auto"
-        and settings.is_apple_silicon
-        and importlib.util.find_spec("laya_mlx") is not None
-    )
-    return LayaClassifier(settings) if wants_laya else DemoClassifier()
+    backend = settings.laya_backend
+    if backend == "demo":
+        return DemoClassifier()
+    if backend == "julia":
+        return JuliaClassifier(settings)
+    if backend in {"laya", "mlx"}:
+        return LayaClassifier(settings)
+    if backend != "auto":
+        raise ValueError("LAYA_BACKEND doit être auto, julia, laya, mlx ou demo.")
+    if settings.is_apple_silicon and importlib.util.find_spec("laya_mlx") is not None:
+        return LayaClassifier(settings)
+    if not settings.is_apple_silicon or importlib.util.find_spec("julia") is not None:
+        return JuliaClassifier(settings)
+    return DemoClassifier()

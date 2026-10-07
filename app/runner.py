@@ -5,7 +5,7 @@ import threading
 from datetime import datetime
 from typing import Any
 
-from .classifier import Classifier
+from .classifier import Classifier, ClassifierLoadError
 from .db import Database, utc_now
 from .demo_data import demo_messages
 
@@ -65,6 +65,8 @@ class RunManager:
                     break
                 try:
                     self.db.complete_email(email["id"], self.classifier.classify(email))
+                except ClassifierLoadError:
+                    raise
                 except Exception as exc:  # Keep the batch running when one message is malformed.
                     self.db.fail_email(email["id"], str(exc))
 

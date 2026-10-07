@@ -7,6 +7,8 @@ from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+JULIA_MODEL = "SupersonicLabs/Julia-1"
+JULIA_REVISION = "a85b127321d580d65176c89ced8273f305745d85"
 
 
 def _load_dotenv(path: Path) -> None:
@@ -34,6 +36,9 @@ class Settings:
     max_emails_per_run: int
     host: str
     port: int
+    julia_model: str = JULIA_MODEL
+    julia_revision: str | None = JULIA_REVISION
+    julia_device: str = "cpu"
 
     @property
     def is_apple_silicon(self) -> bool:
@@ -47,6 +52,7 @@ class Settings:
 def get_settings() -> Settings:
     _load_dotenv(PROJECT_ROOT / ".env")
     data_dir = Path(os.getenv("LAYA_MAIL_DATA_DIR", PROJECT_ROOT / "data")).resolve()
+    julia_model = os.getenv("JULIA_MODEL", JULIA_MODEL).strip()
     return Settings(
         project_root=PROJECT_ROOT,
         data_dir=data_dir,
@@ -60,4 +66,7 @@ def get_settings() -> Settings:
         max_emails_per_run=max(1, min(int(os.getenv("MAX_EMAILS_PER_RUN", "500")), 5000)),
         host=os.getenv("HOST", "127.0.0.1").strip(),
         port=int(os.getenv("PORT", "8000")),
+        julia_model=julia_model,
+        julia_revision=os.getenv("JULIA_REVISION", JULIA_REVISION if julia_model == JULIA_MODEL else "").strip() or None,
+        julia_device=os.getenv("JULIA_DEVICE", "cpu").strip().lower(),
     )

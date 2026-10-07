@@ -30,7 +30,7 @@ gmail = GmailMailClient(google_auth)
 classifier = build_classifier(settings)
 runner = RunManager(database, classifier, {"gmail": gmail})
 
-app = FastAPI(title="Mailaya", version="0.1.0", docs_url="/api/docs", redoc_url=None)
+app = FastAPI(title="Mailaya", version="0.2.0", docs_url="/api/docs", redoc_url=None)
 static_dir = Path(__file__).resolve().parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
@@ -45,7 +45,7 @@ def health() -> dict:
     return {
         "status": "ok",
         "backend": classifier.name,
-        "model": settings.laya_model,
+        "model": classifier.model,
         "gmail_configured": settings.gmail_configured,
         "apple_silicon": settings.is_apple_silicon,
     }
@@ -57,7 +57,7 @@ def dashboard(request: Request) -> dict:
     payload["auth"] = {"gmail": google_auth.status()}
     payload["configuration"] = {
         "backend": classifier.name,
-        "model": settings.laya_model,
+        "model": classifier.model,
         "max_emails": settings.max_emails_per_run,
         "gmail_redirect_uri": str(request.url_for("google_callback")),
     }

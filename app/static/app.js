@@ -213,9 +213,9 @@ function renderDashboard(payload) {
   renderCategorySummary(metrics.categories || {});
   renderAuth(payload.auth || {}, payload.configuration.gmail_redirect_uri);
 
-  $("model-copy").textContent = payload.configuration.backend === "laya-mlx"
-    ? "LAYA MLX, données traitées en local"
-    : "Moteur de démonstration, aucune donnée externe";
+  $("model-copy").textContent = payload.configuration.backend === "demonstration"
+    ? "Moteur de démonstration, aucune donnée externe"
+    : `${payload.configuration.model}, données traitées en local`;
 
   const statusMap = {
     queued: "En file",
