@@ -21,10 +21,8 @@ def settings(tmp_path):
     return Settings(
         project_root=tmp_path, data_dir=tmp_path,
         database_path=tmp_path / "mailaya.sqlite3",
-        google_token_path=tmp_path / "google-token.json",
-        google_client_id="", google_client_secret="",
-        laya_backend="julia", laya_model="aac6fef/laya-multilingual-mlx",
-        laya_dtype="float16", max_emails_per_run=500,
+        laya_backend="julia", laya_model="convaiinnovations/laya-multilingual",
+        max_emails_per_run=500,
         host="127.0.0.1", port=8000,
     )
 
@@ -111,22 +109,19 @@ def test_download_failure_is_explicit_and_retry_can_succeed(settings, runtime, m
 @pytest.mark.parametrize("system,machine,backend,expected", [
     ("Linux", "x86_64", "auto", JuliaClassifier),
     ("Linux", "aarch64", "auto", JuliaClassifier),
-    ("Darwin", "arm64", "auto", LayaClassifier),
+    ("Darwin", "arm64", "auto", JuliaClassifier),
     ("Darwin", "arm64", "julia", JuliaClassifier),
     ("Linux", "x86_64", "demo", DemoClassifier),
     ("Darwin", "arm64", "laya", LayaClassifier),
-    ("Darwin", "arm64", "mlx", LayaClassifier),
 ])
 def test_backend_selection(settings, monkeypatch, system, machine, backend, expected):
     monkeypatch.setattr("app.config.platform.system", lambda: system)
     monkeypatch.setattr("app.config.platform.machine", lambda: machine)
-    monkeypatch.setattr("app.classifier.importlib.util.find_spec", lambda _: object())
     assert isinstance(build_classifier(replace(settings, laya_backend=backend)), expected)
 
 
 def test_linux_auto_does_not_silently_use_demo_when_runtime_is_missing(settings, monkeypatch):
     monkeypatch.setattr("app.config.platform.system", lambda: "Linux")
-    monkeypatch.setattr("app.classifier.importlib.util.find_spec", lambda _: None)
     assert isinstance(build_classifier(replace(settings, laya_backend="auto")), JuliaClassifier)
 
 
@@ -153,8 +148,9 @@ def test_julia_api_and_sqlite_pipeline(settings, runtime, monkeypatch):
     monkeypatch.setattr(main, "settings", settings)
     monkeypatch.setattr(main, "classifier", classifier)
     monkeypatch.setattr(main, "runner", RunManager(Database(settings.database_path), classifier, {}))
-    monkeypatch.setattr(main, "google_auth", main.GoogleAuth(settings))
-    with TestClient(main.app) as client:
+    from app.auth import UserAuth
+    monkeypatch.setattr(main, "user_auth", UserAuth(main.runner.db))
+    with TestClient(main.app, headers={"X-Mailaya-Request": "1"}) as client:
         health = client.get("/api/health").json()
         assert health["backend"] == "julia-pytorch"
         assert health["model"] == JULIA_MODEL

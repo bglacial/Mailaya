@@ -3,15 +3,16 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Mailaya classe vos messages Gmail localement avec Julia ou LAYA.">
+    <meta name="description" content="Mailaya classe vos messages IMAP localement avec Julia ou LAYA.">
+    <meta name="mailaya-root" content="__MAILAYA_ROOT__">
     <meta name="theme-color" content="#663052">
     <title>Mailaya</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Anybody:wdth,wght@75..125,400..800&family=Geologica:wght@300..800&display=swap" rel="stylesheet">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23663052'/%3E%3Cpath d='M15 46V18h7l10 13 10-13h7v28h-7V29L32 41 22 29v17z' fill='%23f6b792'/%3E%3C/svg%3E">
-    <link rel="stylesheet" href="/static/app.css">
-    <script src="/static/app.js" defer></script>
+    <link rel="stylesheet" href="__MAILAYA_ROOT__/static/app.css">
+    <script src="__MAILAYA_ROOT__/static/app.js" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#results">Aller aux résultats</a>
@@ -71,6 +72,32 @@
       </section>
 
       <aside class="execution" aria-labelledby="execution-heading">
+        <section class="user-panel" aria-label="Votre espace">
+          <p id="user-copy">Mode public · messages de démonstration uniquement.</p>
+          <button type="button" class="text-button" id="logout" hidden>Se déconnecter</button>
+          <details id="login-panel">
+            <summary>Se connecter ou créer un compte</summary>
+            <p>Un compte vous permet de configurer vos boîtes IMAP et de conserver vos résultats dans votre espace.</p>
+            <form id="login-form" class="account-form">
+              <label><span>Identifiant</span><input id="login-username" autocomplete="username" minlength="3" maxlength="80" pattern="[A-Za-z0-9@._+\-]+" required></label>
+              <label><span>Mot de passe · 12 caractères minimum</span><input id="login-password" type="password" autocomplete="current-password" minlength="12" maxlength="256" required></label>
+              <div class="account-actions">
+                <button class="secondary-button" type="submit">Se connecter</button>
+                <button class="secondary-button" id="register" type="button">Créer mon compte</button>
+              </div>
+            </form>
+          </details>
+          <details id="password-panel" hidden>
+            <summary>Changer mon mot de passe</summary>
+            <form id="password-form" class="account-form">
+              <label><span>Mot de passe actuel</span><input id="current-password" type="password" autocomplete="current-password" required maxlength="256"></label>
+              <label><span>Nouveau mot de passe · 12 caractères minimum</span><input id="new-password" type="password" autocomplete="new-password" minlength="12" maxlength="256" required></label>
+              <button class="secondary-button" type="submit">Enregistrer le mot de passe</button>
+            </form>
+          </details>
+          <p id="session-note" role="status" aria-live="polite"></p>
+        </section>
+
         <div class="execution-title">
           <h2 id="execution-heading">Exécution</h2>
           <span class="run-status" id="run-status" data-state="idle">Au repos</span>
@@ -82,7 +109,7 @@
               <span>Source</span>
               <select id="source" name="source">
                 <option value="demo">Démonstration</option>
-                <option value="gmail">Gmail</option>
+                <option value="imap" id="imap-source" hidden>IMAP</option>
               </select>
             </label>
             <label>
@@ -100,10 +127,18 @@
             <input id="since-date" name="since_date" type="date" required>
           </label>
 
-          <div class="auth-panel" id="auth-panel" hidden>
-            <div id="auth-copy"></div>
-            <button class="secondary-button" id="connect-button" type="button">Connecter le compte</button>
-          </div>
+          <label class="date-field">
+            <span>Modèle d’analyse</span>
+            <select id="model" name="model">
+              <option value="julia">Julia-1 — SupersonicLabs</option>
+              <option value="laya">LAYA multilingual — Convai Innovations</option>
+            </select>
+          </label>
+          <p class="model-hint" id="model-hint">Le modèle choisi analyse localement les messages, y compris ceux de démonstration.</p>
+          <label class="date-field" id="imap-selector" hidden>
+            <span>Compte IMAP</span>
+            <select id="imap-account" name="imap_account_id"></select>
+          </label>
 
           <button class="primary-button" id="run-button" type="submit">
             <span id="run-button-label">Lancer l’analyse</span>
@@ -115,6 +150,30 @@
           <button class="text-button" id="new-run" type="button">Nouvelle exécution</button>
           <button class="text-button" id="clear-results" type="button">Effacer les résultats</button>
         </div>
+
+        <details class="user-panel" id="imap-panel" hidden>
+          <summary>Mes comptes IMAP</summary>
+          <p>Lecture seule. Utilisez un mot de passe d’application si votre fournisseur le demande.</p>
+          <div id="imap-accounts"></div>
+          <button id="add-account" class="secondary-button" type="button">Ajouter un compte IMAP</button>
+          <form id="imap-form" class="account-form" hidden>
+            <h3 id="imap-form-title">Ajouter un compte</h3>
+            <label><span>Nom du compte</span><input id="imap-name" maxlength="80" required placeholder="Messagerie personnelle"></label>
+            <label><span>Serveur IMAP</span><input id="imap-host" maxlength="253" required placeholder="imap.exemple.fr" autocapitalize="none" spellcheck="false"></label>
+            <div class="field-grid">
+              <label><span>Sécurité</span><select id="imap-security"><option value="ssl">TLS direct</option><option value="starttls">STARTTLS</option></select></label>
+              <label><span>Port</span><input id="imap-port" type="number" min="1" max="65535" value="993" required></label>
+            </div>
+            <label><span>Identifiant IMAP</span><input id="imap-username" maxlength="320" required autocomplete="off" autocapitalize="none" spellcheck="false"></label>
+            <label><span id="imap-password-label">Mot de passe IMAP</span><input id="imap-password" type="password" maxlength="1024" autocomplete="new-password"></label>
+            <label><span>Dossier</span><input id="imap-mailbox" value="INBOX" maxlength="255" required></label>
+            <div class="account-actions">
+              <button class="secondary-button" type="submit">Enregistrer le compte</button>
+              <button id="cancel-account" class="text-button" type="button">Annuler</button>
+            </div>
+          </form>
+          <p id="imap-note" role="status" aria-live="polite"></p>
+        </details>
 
         <section class="progress-section" aria-labelledby="progress-heading">
           <div class="section-label">

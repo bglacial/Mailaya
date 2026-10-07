@@ -28,6 +28,29 @@ class Database:
             connection.execute("PRAGMA journal_mode = WAL")
             connection.executescript(
                 """
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT NOT NULL UNIQUE,
+                    password_hash TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS sessions (
+                    token_hash TEXT PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    expires_at REAL NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS imap_accounts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    name TEXT NOT NULL,
+                    host TEXT NOT NULL,
+                    port INTEGER NOT NULL,
+                    security TEXT NOT NULL,
+                    username TEXT NOT NULL,
+                    password_encrypted TEXT NOT NULL,
+                    mailbox TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS runs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     source TEXT NOT NULL,
@@ -65,26 +88,52 @@ class Database:
                 );
                 """
             )
+            # Existing single-user results remain unowned and invisible to signed-in users.
+            columns = {row["name"] for row in connection.execute("PRAGMA table_info(runs)")}
+            if "user_id" not in columns:
+                connection.execute("ALTER TABLE runs ADD COLUMN user_id INTEGER REFERENCES users(id)")
+            if "imap_account_id" not in columns:
+                connection.execute("ALTER TABLE runs ADD COLUMN imap_account_id INTEGER REFERENCES imap_accounts(id) ON DELETE SET NULL")
+            if "model" not in columns:
+                connection.execute("ALTER TABLE runs ADD COLUMN model TEXT")
+            connection.execute("CREATE INDEX IF NOT EXISTS runs_user ON runs(user_id, id)")
+        self.path.chmod(0o600)
 
-    def create_run(self, source: str, since_date: str, limit: int, backend: str) -> int:
+    def create_run(self, source: str, since_date: str, limit: int, backend: str,
+                   user_id: int | None = None, imap_account_id: int | None = None,
+                   model: str | None = None) -> int:
         with self.connect() as connection:
             cursor = connection.execute(
                 """INSERT INTO runs
-                (source, since_date, requested_limit, status, model_backend, created_at)
-                VALUES (?, ?, ?, 'queued', ?, ?)""",
-                (source, since_date, limit, backend, utc_now()),
+                (source, since_date, requested_limit, status, model_backend, created_at, user_id, imap_account_id, model)
+                VALUES (?, ?, ?, 'queued', ?, ?, ?, ?, ?)""",
+                (source, since_date, limit, backend, utc_now(), user_id, imap_account_id, model),
             )
             return int(cursor.lastrowid)
 
-    def get_run(self, run_id: int) -> dict[str, Any] | None:
+    def get_run(self, run_id: int, user_id: int | None = None) -> dict[str, Any] | None:
         with self.connect() as connection:
-            row = connection.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+            row = connection.execute(
+                "SELECT * FROM runs WHERE id = ?" + (" AND user_id = ?" if user_id is not None else ""),
+                (run_id, user_id) if user_id is not None else (run_id,),
+            ).fetchone()
         return dict(row) if row else None
 
-    def latest_run(self) -> dict[str, Any] | None:
+    def latest_run(self, user_id: int | None = None) -> dict[str, Any] | None:
         with self.connect() as connection:
-            row = connection.execute("SELECT * FROM runs ORDER BY id DESC LIMIT 1").fetchone()
+            row = connection.execute(
+                "SELECT * FROM runs" + (" WHERE user_id = ?" if user_id is not None else " WHERE user_id IS NULL AND source = 'demo'") + " ORDER BY id DESC LIMIT 1",
+                (user_id,) if user_id is not None else (),
+            ).fetchone()
         return dict(row) if row else None
+
+    def active_run(self, user_id: int | None) -> bool:
+        with self.connect() as connection:
+            return connection.execute(
+                "SELECT 1 FROM runs WHERE user_id IS ? AND status IN ('queued', 'fetching', 'running')"
+                + (" AND source = 'demo'" if user_id is None else "") + " LIMIT 1",
+                (user_id,),
+            ).fetchone() is not None
 
     def set_run(self, run_id: int, **values: Any) -> None:
         if not values:
@@ -170,6 +219,48 @@ class Database:
             results.append(item)
         return results
 
-    def clear(self) -> None:
+    def clear(self, user_id: int | None = None) -> None:
         with self.connect() as connection:
-            connection.execute("DELETE FROM runs")
+            if user_id is None:
+                connection.execute("DELETE FROM runs WHERE user_id IS NULL AND source = 'demo'")
+            else:
+                connection.execute("DELETE FROM runs WHERE user_id = ?", (user_id,))
+
+    def imap_accounts(self, user_id: int) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT id, name, host, port, security, username, mailbox, created_at FROM imap_accounts WHERE user_id = ? ORDER BY id",
+                (user_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def imap_account(self, account_id: int, user_id: int) -> dict[str, Any] | None:
+        with self.connect() as connection:
+            row = connection.execute("SELECT * FROM imap_accounts WHERE id = ? AND user_id = ?", (account_id, user_id)).fetchone()
+        return dict(row) if row else None
+
+    def save_imap_account(self, user_id: int, values: dict[str, Any], account_id: int | None = None) -> int:
+        fields = ("name", "host", "port", "security", "username", "password_encrypted", "mailbox")
+        with self.connect() as connection:
+            if account_id is None:
+                cursor = connection.execute(
+                    "INSERT INTO imap_accounts (user_id, name, host, port, security, username, password_encrypted, mailbox, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (user_id, *(values[field] for field in fields), utc_now()),
+                )
+                return int(cursor.lastrowid)
+            connection.execute(
+                "UPDATE imap_accounts SET name=?, host=?, port=?, security=?, username=?, password_encrypted=?, mailbox=? WHERE id=? AND user_id=?",
+                (*(values[field] for field in fields), account_id, user_id),
+            )
+        return account_id
+
+    def account_in_use(self, account_id: int, user_id: int) -> bool:
+        with self.connect() as connection:
+            return connection.execute(
+                "SELECT 1 FROM runs WHERE imap_account_id=? AND user_id=? AND status IN ('queued', 'fetching', 'running', 'paused') LIMIT 1",
+                (account_id, user_id),
+            ).fetchone() is not None
+
+    def delete_imap_account(self, account_id: int, user_id: int) -> None:
+        with self.connect() as connection:
+            connection.execute("DELETE FROM imap_accounts WHERE id=? AND user_id=?", (account_id, user_id))

@@ -1,20 +1,19 @@
 [project]
 name = "mailaya"
-version = "0.2.0"
-description = "Triage local de messages Gmail avec Julia/PyTorch ou LAYA MLX"
+version = "0.3.0"
+description = "Triage local de messages IMAP avec Julia ou LAYA, isolés par utilisateur"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.115,<1",
   "httpx>=0.27,<1",
-  "google-auth>=2.35,<3",
-  "google-auth-oauthlib>=1.2,<2",
   "uvicorn[standard]>=0.30,<1",
-  "laya-mlx>=0.1.0; platform_system == 'Darwin' and platform_machine == 'arm64'",
+  "cryptography>=43",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<9"]
+laya = ["laya>=0.4,<0.5", "torch>=2.6"]
 julia = [
   "torch>=2.6",
   "supersonic-julia @ git+https://huggingface.co/SupersonicLabs/Julia-1@a85b127321d580d65176c89ced8273f305745d85",

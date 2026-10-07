@@ -1,8 +1,14 @@
 const state = {
   dashboard: null,
+  user: null,
+  generation: 0,
+  editingAccount: null,
+  modelInitialized: false,
   expanded: new Set(),
   pollTimer: null,
 };
+
+const apiBase = document.querySelector('meta[name="mailaya-root"]')?.content || "";
 
 const $ = (id) => document.getElementById(id);
 
@@ -13,9 +19,9 @@ function setDefaultDate() {
 }
 
 async function api(path, options = {}) {
-  const response = await fetch(path, {
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+  const response = await fetch(apiBase + path, {
     ...options,
+    headers: { "Content-Type": "application/json", "X-Mailaya-Request": "1", ...(options.headers || {}) },
   });
   if (!response.ok) {
     let message = `Erreur ${response.status}`;
@@ -25,7 +31,9 @@ async function api(path, options = {}) {
     } catch (_) {
       // The HTTP status is sufficient when the body is not JSON.
     }
-    throw new Error(message);
+    const error = new Error(message);
+    error.status = response.status;
+    throw error;
   }
   return response.status === 204 ? null : response.json();
 }
@@ -176,31 +184,61 @@ function renderCategorySummary(categories) {
   }
 }
 
-function renderAuth(authByProvider, gmailRedirectUri) {
-  const panel = $("auth-panel");
-  const copy = $("auth-copy");
-  const button = $("connect-button");
-  const source = $("source").value;
-  const auth = authByProvider?.gmail || { state: "unconfigured" };
-  panel.hidden = source === "demo";
-  copy.replaceChildren();
-  button.hidden = false;
-  if (source === "demo") return;
-  if (auth.state === "unconfigured") {
-    copy.append(text("p", "Ajoutez GOOGLE_CLIENT_ID et GOOGLE_CLIENT_SECRET dans le fichier .env pour activer Gmail."));
-    button.hidden = true;
-  } else if (auth.state === "connected") {
-    copy.append(text("p", `Connecté : ${auth.account || "compte Gmail"}`));
-    button.textContent = "Reconnecter Gmail";
-  } else {
-    copy.append(text("p", auth.error || "Gmail n’est pas encore connecté."));
-    button.textContent = "Connecter Gmail";
+function renderAccounts(accounts) {
+  const selected = $("imap-account").value;
+  $("imap-account").replaceChildren(new Option("Choisir un compte", ""));
+  const container = $("imap-accounts");
+  container.replaceChildren();
+  for (const account of accounts) {
+    $("imap-account").add(new Option(`${account.name} · ${account.username}`, String(account.id)));
+    const item = text("div", "", "imap-item");
+    item.append(text("strong", account.name), text("p", `${account.username} · ${account.host}:${account.port} · ${account.mailbox}`));
+    const actions = text("div", "", "account-actions");
+    for (const [label, action] of [["Tester", "test"], ["Modifier", "edit"], ["Supprimer", "delete"]]) {
+      const button = text("button", label, "text-button");
+      button.type = "button";
+      button.addEventListener("click", () => accountAction(account, action, button));
+      actions.append(button);
+    }
+    item.append(actions);
+    container.append(item);
   }
+  if (!accounts.length) container.append(text("p", "Ajoutez votre premier compte pour analyser vos messages IMAP."));
+  $("imap-account").value = accounts.some(account => String(account.id) === selected) ? selected : accounts.length === 1 ? String(accounts[0].id) : "";
+  $("imap-selector").hidden = !state.user || $("source").value !== "imap";
+}
 
-  if (auth.state !== "connected" && gmailRedirectUri) {
-    copy.append(text("p", "URI à autoriser dans Google Cloud :", "auth-redirect-label"));
-    copy.append(text("code", gmailRedirectUri, "auth-redirect"));
-  }
+function renderSession(user) {
+  state.user = user;
+  $("user-copy").textContent = user ? `Connecté : ${user.username} · votre espace personnel.` : "Mode public · messages de démonstration uniquement.";
+  $("logout").hidden = !user;
+  $("login-panel").hidden = Boolean(user);
+  $("password-panel").hidden = !user;
+  $("imap-panel").hidden = !user;
+  // Remove IMAP entirely from the public source selector.
+  const source = $("source").value;
+  $("source").replaceChildren(new Option("Démonstration", "demo"));
+  if (user) $("source").add(new Option("IMAP", "imap"));
+  $("source").value = user && source === "imap" ? "imap" : "demo";
+  if (!user) $("imap-selector").hidden = true;
+}
+
+function resetDashboard() {
+  state.generation += 1;
+  state.dashboard = null;
+  state.expanded.clear();
+  state.modelInitialized = false;
+  state.editingAccount = null;
+  schedulePoll(false);
+  $("imap-form").reset();
+  $("imap-form").hidden = true;
+  $("password-form").reset();
+  $("imap-accounts").replaceChildren();
+  $("imap-note").textContent = "";
+  renderRows([]);
+  renderCategoryFilter([]);
+  renderCategorySummary({});
+  $("system-note").textContent = "Chargement de votre espace…";
 }
 
 function renderDashboard(payload) {
@@ -211,7 +249,19 @@ function renderDashboard(payload) {
   renderCategoryFilter(emails);
   renderRows(emails);
   renderCategorySummary(metrics.categories || {});
-  renderAuth(payload.auth || {}, payload.configuration.gmail_redirect_uri);
+  renderAccounts(payload.imap_accounts || []);
+  if (!state.modelInitialized) {
+    $("model").value = payload.configuration.default_model;
+    state.modelInitialized = true;
+  }
+  if (run && ["queued", "fetching", "running", "paused"].includes(run.status)) {
+    $("model").value = run.model_backend === "laya-pytorch" ? "laya" : "julia";
+    $("source").value = run.source;
+    $("since-date").value = run.since_date;
+    $("limit").value = String(run.requested_limit);
+    if (run.imap_account_id) $("imap-account").value = String(run.imap_account_id);
+    $("imap-selector").hidden = run.source !== "imap";
+  }
 
   $("model-copy").textContent = payload.configuration.backend === "demonstration"
     ? "Moteur de démonstration, aucune donnée externe"
@@ -251,12 +301,14 @@ function renderDashboard(payload) {
   const active = ["queued", "fetching", "running"].includes(status);
   const paused = status === "paused";
   const selectedSource = $("source").value;
-  const sourceReady = selectedSource === "demo" || payload.auth?.[selectedSource]?.state === "connected";
+  const sourceReady = selectedSource === "demo" || Boolean(state.user && $("imap-account").value);
   $("run-button-label").textContent = active ? "Mettre en pause" : paused ? "Reprendre l’analyse" : "Lancer l’analyse";
   $("run-button").dataset.action = active ? "pause" : paused ? "resume" : "start";
   $("run-button").disabled = !active && !paused && !sourceReady;
   $("source").disabled = active || paused;
   $("limit").disabled = active || paused;
+  $("model").disabled = active || paused;
+  $("imap-account").disabled = active || paused;
   $("since-date").disabled = active || paused;
   $("clear-results").disabled = active;
   $("results-summary").textContent = run
@@ -266,7 +318,7 @@ function renderDashboard(payload) {
   if (run?.error) $("system-note").textContent = run.error;
   else if (active) $("system-note").textContent = `${processed} traité${processed > 1 ? "s" : ""}, capacité locale active.`;
   else if (paused) $("system-note").textContent = "Exécution en pause. Les résultats déjà calculés sont conservés.";
-  else if (status === "complete") $("system-note").textContent = `Terminé avec ${payload.configuration.backend}.`;
+  else if (status === "complete") $("system-note").textContent = `Terminé avec ${run.model || payload.configuration.backend}.`;
   else $("system-note").textContent = "Prêt pour une démonstration locale.";
 
   schedulePoll(active);
@@ -278,9 +330,20 @@ function schedulePoll(shouldPoll) {
 }
 
 async function loadDashboard() {
+  const generation = state.generation;
   try {
-    renderDashboard(await api("/api/dashboard"));
+    const payload = await api("/api/dashboard");
+    if (generation === state.generation) renderDashboard(payload);
   } catch (error) {
+    if (generation !== state.generation) return;
+    if (error.status === 401) {
+      resetDashboard();
+      renderSession(null);
+      await api("/api/logout", { method: "POST" });
+      $("session-note").textContent = error.message;
+      await loadDashboard();
+      return;
+    }
     $("system-note").textContent = error.message;
     schedulePoll(false);
   }
@@ -290,6 +353,7 @@ async function handleRun(event) {
   event.preventDefault();
   const action = $("run-button").dataset.action || "start";
   const run = state.dashboard?.run;
+  let errorMessage = null;
   try {
     $("run-button").disabled = true;
     if (action === "pause") await api(`/api/runs/${run.id}/pause`, { method: "POST" });
@@ -301,26 +365,90 @@ async function handleRun(event) {
           source: $("source").value,
           since_date: $("since-date").value,
           limit: Number($("limit").value),
+          model: $("model").value,
+          imap_account_id: $("source").value === "imap" ? Number($("imap-account").value) : null,
         }),
       });
     }
     await loadDashboard();
   } catch (error) {
-    $("system-note").textContent = error.message;
+    errorMessage = error.message;
   } finally {
     if (state.dashboard) renderDashboard(state.dashboard);
+    if (errorMessage) $("system-note").textContent = errorMessage;
   }
 }
 
-async function connectAccount() {
+async function authenticate(register = false) {
+  if (!$("login-form").reportValidity()) return;
+  const buttons = $("login-form").querySelectorAll("button");
+  buttons.forEach(button => button.disabled = true);
   try {
-    $("connect-button").disabled = true;
-    const response = await api("/api/auth/google/start", { method: "POST" });
-    window.location.assign(response.authorization_url);
+    const payload = await api(register ? "/api/users" : "/api/login", {
+      method: "POST", body: JSON.stringify({ username: $("login-username").value, password: $("login-password").value }),
+    });
+    resetDashboard();
+    renderSession(payload.user);
+    $("login-form").reset();
+    $("session-note").textContent = register ? "Votre compte est créé. Vous pouvez ajouter vos boîtes IMAP." : "Connexion établie.";
+    await loadDashboard();
   } catch (error) {
-    $("system-note").textContent = error.message;
+    $("session-note").textContent = error.message;
   } finally {
-    $("connect-button").disabled = false;
+    buttons.forEach(button => button.disabled = false);
+  }
+}
+
+function editAccount(account = null) {
+  state.editingAccount = account?.id || null;
+  $("imap-form").reset();
+  for (const field of ["name", "host", "port", "security", "username", "mailbox"]) {
+    if (account) $(`imap-${field}`).value = account[field];
+  }
+  $("imap-form-title").textContent = account ? "Modifier le compte" : "Ajouter un compte";
+  $("imap-password-label").textContent = account ? "Mot de passe IMAP · laisser vide pour le conserver" : "Mot de passe IMAP";
+  $("imap-password").required = !account;
+  $("imap-form").hidden = false;
+  $("imap-name").focus();
+}
+
+async function accountAction(account, action, button) {
+  if (action === "edit") { editAccount(account); return; }
+  button.disabled = true;
+  try {
+    await api(`/api/imap/accounts/${account.id}${action === "test" ? "/test" : ""}`, { method: action === "test" ? "POST" : "DELETE" });
+    $("imap-note").textContent = action === "test" ? `Connexion à ${account.name} réussie. Le dossier est accessible en lecture seule.` : `Le compte ${account.name} a été supprimé de votre espace.`;
+    await loadDashboard();
+  } catch (error) {
+    $("imap-note").textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function saveAccount(event) {
+  event.preventDefault();
+  const button = $("imap-form").querySelector('button[type="submit"]');
+  button.disabled = true;
+  const body = {};
+  for (const field of ["name", "host", "port", "security", "username", "mailbox"]) body[field] = $(`imap-${field}`).value;
+  body.port = Number(body.port);
+  body.password = $("imap-password").value || null;
+  try {
+    const id = state.editingAccount;
+    const payload = await api(`/api/imap/accounts${id ? `/${id}` : ""}`, { method: id ? "PUT" : "POST", body: JSON.stringify(body) });
+    $("imap-form").reset();
+    $("imap-form").hidden = true;
+    state.editingAccount = null;
+    $("source").value = "imap";
+    await loadDashboard();
+    $("imap-account").value = String(payload.account.id);
+    if (state.dashboard) renderDashboard(state.dashboard);
+    $("imap-note").textContent = "Compte enregistré. Utilisez Tester pour vérifier la connexion au serveur.";
+  } catch (error) {
+    $("imap-note").textContent = error.message;
+  } finally {
+    button.disabled = false;
   }
 }
 
@@ -341,11 +469,43 @@ $("source").addEventListener("change", () => {
   if (state.dashboard) renderDashboard(state.dashboard);
 });
 $("category-filter").addEventListener("change", () => renderRows(state.dashboard?.emails || []));
-$("connect-button").addEventListener("click", connectAccount);
+$("imap-account").addEventListener("change", () => { if (state.dashboard) renderDashboard(state.dashboard); });
 $("clear-results").addEventListener("click", clearResults);
 $("new-run").addEventListener("click", () => {
   if (["queued", "fetching", "running"].includes(state.dashboard?.run?.status)) return;
   $("since-date").focus();
   $("system-note").textContent = "Réglez la source, la date et le volume, puis relancez l’analyse.";
 });
-loadDashboard();
+$("login-form").addEventListener("submit", event => { event.preventDefault(); authenticate(); });
+$("register").addEventListener("click", () => authenticate(true));
+$("logout").addEventListener("click", async () => {
+  try {
+    await api("/api/logout", { method: "POST" });
+    resetDashboard();
+    renderSession(null);
+    $("session-note").textContent = "Vous êtes déconnecté. Le mode public propose uniquement la démonstration.";
+    await loadDashboard();
+  } catch (error) { $("session-note").textContent = error.message; }
+});
+$("password-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  try {
+    await api("/api/password", { method: "PUT", body: JSON.stringify({ current_password: $("current-password").value, new_password: $("new-password").value }) });
+    $("password-form").reset();
+    $("password-panel").open = false;
+    $("session-note").textContent = "Mot de passe enregistré. Vos autres sessions ont été fermées.";
+  } catch (error) { $("session-note").textContent = error.message; }
+});
+$("add-account").addEventListener("click", () => editAccount());
+$("cancel-account").addEventListener("click", () => { $("imap-form").reset(); $("imap-form").hidden = true; state.editingAccount = null; });
+$("imap-form").addEventListener("submit", saveAccount);
+$("imap-security").addEventListener("change", () => { $("imap-port").value = $("imap-security").value === "ssl" ? "993" : "143"; });
+async function initialize() {
+  try {
+    const payload = await api("/api/session");
+    if (!payload.user) await api("/api/logout", { method: "POST" });
+    renderSession(payload.user);
+    await loadDashboard();
+  } catch (error) { $("session-note").textContent = error.message; }
+}
+initialize();

@@ -1,173 +1,79 @@
 # Mailaya
 
-Mailaya récupère des messages Gmail depuis une date donnée et les analyse localement avec [Julia-1 / PyTorch](https://huggingface.co/SupersonicLabs/Julia-1) sur Linux, ou [LAYA MLX](https://huggingface.co/aac6fef/laya-multilingual-mlx) sur Mac Apple Silicon. Pour chaque message, l’application conserve :
+Mailaya analyse localement des messages avec [LAYA multilingual](https://huggingface.co/convaiinnovations/laya-multilingual) ou [Julia-1](https://huggingface.co/SupersonicLabs/Julia-1). Le modèle se choisit pour chaque analyse dans l’interface, dans les deux modes :
 
-- la catégorie gagnante et la matrice complète des probabilités ;
-- un score de priorité sur 100 ;
-- un score de spam sur 100 ;
-- un score d’action requise sur 100 ;
-- le temps d’inférence, hors chargement initial du modèle.
+- **Public** : uniquement les 500 messages fictifs de démonstration. Les résultats de cette démonstration sont communs aux visiteurs publics.
+- **Connecté** : démonstration ou boîtes IMAP personnelles. Chaque utilisateur accède uniquement à ses comptes, ses analyses, ses messages et ses résultats.
 
-L’interface inclut la progression, les erreurs, la pause/reprise, les statistiques de latence et un mode démonstration sans accès à une boîte mail.
+Chaque message reçoit une catégorie et sa matrice de probabilités, ainsi que des scores de priorité, de spam et d’action attendue. L’interface affiche la progression, les erreurs, la pause/reprise et les statistiques de latence. Le choix du modèle est conservé à la reprise d’une analyse.
 
-## Prérequis
+## Installation et lancement
 
-- Linux avec CPU x86_64 ou ARM64 pour Julia, ou Mac Apple Silicon avec macOS 14+ pour MLX ;
-- Python 3.11 ou plus récent ;
-- [`uv`](https://docs.astral.sh/uv/getting-started/installation/) ;
-- environ 551 Mio pour les poids Julia FP32, plus le runtime PyTorch, le tokenizer et la mémoire d’inférence ; environ 700 Mio pour le checkpoint MLX ;
-- un client OAuth Google pour Gmail.
-
-Le moteur de démonstration fonctionne aussi sans MLX et sans compte Google. Il contient 500 messages fictifs.
-
-## Installation
-
-Depuis le dossier du projet :
+Python 3.11+ et [uv](https://docs.astral.sh/uv/getting-started/installation/) sont nécessaires. Les deux runtimes utilisent PyTorch et fonctionnent sur Linux et macOS. Sur Linux, uv installe les roues CPU.
 
 ```bash
 cp .env.example .env
+uv sync --extra laya --extra julia --extra dev
+uv run --extra laya --extra julia uvicorn app.main:app --reload
 ```
 
-Sur **Linux**, installez le moteur Julia natif :
+Ouvrez [http://127.0.0.1:8000](http://127.0.0.1:8000). La documentation de l’API est disponible sous `/api/docs`.
 
-```bash
-uv sync --extra julia --extra dev
-```
+Le premier usage de chaque modèle télécharge ses poids depuis Hugging Face, sauf s’ils sont déjà en cache. Le modèle choisi se charge à la demande puis reste en mémoire jusqu’au choix d’un autre modèle. Les analyses sont sérialisées entre les utilisateurs et le checkpoint précédent est déchargé lors du changement, afin de contenir la mémoire sur les petites machines. Aucun contenu de mail n’est envoyé à un service d’IA distant.
 
-`uv` installe PyTorch CPU sur Linux : aucun GPU ni MLX n’est nécessaire. Git doit être disponible pour installer le runtime officiel Julia. Le runtime et le checkpoint Julia-1 sont figés à la révision `a85b127321d580d65176c89ced8273f305745d85`.
+Vous pouvez installer un seul runtime avec `--extra laya` ou `--extra julia`. Une analyse sélectionnant un runtime absent s’arrête avec une instruction d’installation. La source **Démonstration** utilise des mails fictifs et le vrai modèle sélectionné ; elle ne remplace pas son inference par des règles. `LAYA_BACKEND=demo` fournit un moteur déterministe aux tests et aux appels API sans sélection explicite de modèle.
 
-Sur **Mac Apple Silicon**, ou pour utiliser uniquement le moteur de démonstration :
+## Utilisateurs et comptes IMAP
 
-```bash
-uv sync --extra dev
-```
+1. Dans **Se connecter ou créer un compte**, choisissez un identifiant de 3 à 80 caractères (lettres, chiffres, `@._+-`) et un mot de passe d’au moins 12 caractères.
+2. Cliquez sur **Créer mon compte**. Chaque personne crée son propre espace.
+3. Ouvrez **Mes comptes IMAP**, puis **Ajouter un compte IMAP**.
+4. Renseignez le serveur, l’identifiant et le mot de passe ou mot de passe d’application fourni par votre messagerie. Choisissez **TLS direct**, généralement sur le port `993`, ou **STARTTLS**, généralement sur le port `143`.
+5. Laissez `INBOX` pour la boîte de réception, ou renseignez un autre dossier. Les noms internationaux sont encodés en UTF-7 modifié.
+6. Enregistrez, puis cliquez sur **Tester** pour vérifier les identifiants et l’accès au dossier.
+7. Sélectionnez **IMAP**, le compte, le modèle, la date et le nombre de messages, puis lancez l’analyse.
 
-## Lancement
+La connexion vérifie le certificat TLS. Le dossier est ouvert en lecture seule ; les messages sont recherchés par UID et récupérés avec `BODY.PEEK[]`, sans les marquer comme lus. Les dates de recherche utilisent la date de réception du serveur IMAP. Les mails sont récupérés avec leur structure MIME, puis seul un aperçu textuel de 2 000 caractères est conservé pour l’analyse ; les pièces jointes ne sont pas analysées. Ces comportements utilisent le client [imaplib de Python](https://docs.python.org/3/library/imaplib.html).
 
-Pour lancer l’application avec la configuration du fichier `.env` :
+Les comptes peuvent être testés, modifiés ou supprimés depuis l’interface. Laisser le mot de passe vide lors d’une modification conserve celui déjà enregistré. Un compte utilisé par une analyse active ou en pause ne peut être modifié ou supprimé avant la fin de l’analyse ou l’effacement de ses résultats. **Changer mon mot de passe** ferme les autres sessions de l’utilisateur. **Se déconnecter** remet l’interface en mode public.
 
-```bash
-uv run uvicorn app.main:app --reload
-```
+## Stockage et mise à jour
 
-Sur Linux avec Julia, gardez l’extra actif au lancement pour que `uv` conserve ses dépendances :
+La base SQLite se trouve par défaut dans `data/laya-mail.sqlite3` (modifiable avec `LAYA_MAIL_DATA_DIR`). Les mots de passe de connexion à Mailaya sont hachés avec scrypt. Les sessions utilisent des jetons aléatoires stockés sous forme de hash dans SQLite, expirent après sept jours et sont transmis par cookie HttpOnly/SameSite. Les requêtes de modification exigent le header `X-Mailaya-Request: 1` et refusent les origines externes.
 
-```bash
-uv run --extra julia uvicorn app.main:app --reload
-```
+Les mots de passe IMAP sont chiffrés avec Fernet. La clé locale `data/imap.key` et la base sont protégées par des permissions `0600`, dans un dossier `0700`. Sauvegardez la base et la clé ensemble dans un emplacement protégé. La perte de la clé oblige à ressaisir les mots de passe IMAP ; elle n’efface pas les résultats. Les aperçus des messages restent dans SQLite et ne sont pas chiffrés applicativement.
 
-Pour découvrir immédiatement l’interface sans compte mail ni téléchargement du modèle :
+La migration ajoute les propriétaires sans attribuer les anciennes analyses privées à un nouvel utilisateur : les données historiques sans propriétaire restent conservées, mais masquées. Les anciens fichiers OAuth ne sont plus utilisés et peuvent être retirés manuellement du dossier de données.
 
-```bash
-LAYA_BACKEND=demo uv run uvicorn app.main:app --reload
-```
-
-Ouvrez ensuite [http://127.0.0.1:8000](http://127.0.0.1:8000). La documentation de l’API est disponible sous `/api/docs`.
-
-Arrêtez le serveur avec `Ctrl+C`.
-
-Au premier traitement avec Julia, Mailaya télécharge les poids, les configurations et le tokenizer depuis Hugging Face. Le moteur reste chargé entre les mails et les traitements suivants utilisent le cache local. En mode MLX, `laya-mlx` télécharge son propre checkpoint. Le téléchargement et le chargement initial ne sont pas comptés dans le temps d’inférence affiché.
-
-## Configuration Gmail
-
-1. Créez ou sélectionnez un projet dans Google Cloud Console.
-2. Activez **Gmail API** dans la bibliothèque des API.
-3. Configurez l’écran de consentement OAuth. En mode test, ajoutez votre adresse Gmail aux utilisateurs de test.
-4. Créez un client OAuth 2.0 de type **Application Web**.
-5. Dans **Google Auth Platform → Clients**, ouvrez ce client et ajoutez l’URI de redirection affichée par Mailaya quand vous sélectionnez **Gmail**. Avec l’adresse de lancement par défaut, elle vaut :
-
-```text
-http://127.0.0.1:8000/api/auth/google/callback
-```
-
-Google exige une correspondance exacte avec l’URI envoyée par l’application. Le nom d’hôte (`localhost` ou `127.0.0.1`), le port (`8000`, `8766`, etc.), le chemin et la barre finale doivent être identiques. Par exemple, si Mailaya est ouvert sur `http://127.0.0.1:8766`, autorisez `http://127.0.0.1:8766/api/auth/google/callback`. Utilisez un client OAuth de type **Application Web** et enregistrez l’URI dans **URI de redirection autorisés**, pas dans les origines JavaScript.
-
-6. Copiez les identifiants dans `.env` :
-
-```dotenv
-GOOGLE_CLIENT_ID=votre-identifiant-google
-GOOGLE_CLIENT_SECRET=votre-secret-google
-```
-
-Redémarrez ensuite le serveur, sélectionnez **Gmail** et cliquez sur **Connecter Gmail**. L’application demande uniquement l’autorisation `gmail.readonly`. Le jeton est conservé dans `data/google-token.json` avec des permissions limitées à l’utilisateur local.
-
-## Configuration des moteurs
-
-`LAYA_BACKEND=auto` choisit MLX sur Apple Silicon si `laya-mlx` est installé, et Julia sur Linux et les autres plateformes. Sur un Mac Apple Silicon sans MLX, il choisit Julia si son runtime est installé, sinon la démonstration. Sur Linux, une installation Julia manquante produit une erreur explicite au premier traitement. Pour imposer un moteur, utilisez `julia`, `laya` (ou `mlx`), ou `demo`. Une valeur inconnue est rejetée.
-
-### Julia / Linux
-
-```dotenv
-LAYA_BACKEND=julia
-JULIA_MODEL=SupersonicLabs/Julia-1
-JULIA_REVISION=a85b127321d580d65176c89ced8273f305745d85
-JULIA_DEVICE=cpu
-JULIA_CPU_THREADS=4
-```
-
-Les paramètres `LAYA_MODEL` et `LAYA_DTYPE` restent réservés à MLX : un ancien `.env` ne fera pas charger un checkpoint MLX avec Julia. Pour essayer Julia sur Mac, installez aussi l’extra `julia` et imposez `LAYA_BACKEND=julia`.
-
-Pour un checkpoint déjà téléchargé, définissez `JULIA_MODEL=/chemin/vers/Julia-1`. Le répertoire doit contenir `model.safetensors`, `julia_config.json`, `encoder/config.json` et le dossier `tokenizer/`. Mailaya ne télécharge rien si ce répertoire existe. Le cache distant utilise les variables standard Hugging Face, par exemple `HF_HOME` et `HF_HUB_OFFLINE=1` une fois le modèle téléchargé.
-
-Un autre checkpoint doit être compatible avec le runtime natif Julia ; ce moteur ne charge pas les modèles génératifs arbitraires. Pour un autre dépôt, adaptez aussi `JULIA_REVISION` (ou laissez-la vide). `JULIA_DEVICE=cuda` nécessite une installation PyTorch CUDA appropriée ; l’extra fourni par `uv` cible le CPU Linux.
-
-Julia reçoit les quatre questions dans un même appel et les évalue indépendamment, avec encodage strict, une limite combinée de 8 192 tokens et un budget de 512 tokens pour chaque question et ses choix. Un dépassement est signalé sur le mail concerné. Une erreur de téléchargement ou de chargement arrête l’exécution avec un message explicite et conserve les mails en attente.
-
-Les catégories et scores conservent le format Mailaya, mais les décisions de Julia et de LAYA ne sont pas nécessairement identiques. Évaluez les résultats sur vos messages avant de leur accorder la même confiance.
-
-### LAYA / Apple Silicon
-
-Pour imposer le modèle MLX :
-
-```dotenv
-LAYA_BACKEND=laya
-LAYA_MODEL=aac6fef/laya-multilingual-mlx
-LAYA_DTYPE=float16
-```
-
-Pour travailler uniquement avec les données de démonstration :
-
-```dotenv
-LAYA_BACKEND=demo
-```
-
-Le modèle reçoit l’expéditeur, l’objet et un aperçu du corps. Gmail est interrogé par pages pouvant contenir jusqu’à 500 références, puis chaque aperçu est récupéré en lecture seule. Aucun contenu de mail n’est envoyé à un service d’IA distant.
+Pour un accès HTTPS derrière un reverse proxy, activez `MAILAYA_SECURE_COOKIES=true` et configurez Uvicorn pour ne faire confiance qu’au proxy réellement utilisé. L’application fonctionne avec un seul processus Uvicorn : les verrous de traitement et les workers sont locaux à ce processus. Les inscriptions sont ouvertes ; il n’y a pas de console administrateur ni de récupération de mot de passe par e-mail.
 
 ## Tests
 
 ```bash
-uv run --extra dev pytest
+uv run --extra dev --extra laya --extra julia pytest
+node --check app/static/app.js
 ```
 
-Les tests couvrent le moteur déterministe, la sélection des backends Linux/Mac, l’adaptateur Julia, ses erreurs de chargement et le parcours API → SQLite. Le runtime Julia est simulé dans ces tests : ils ne téléchargent pas le checkpoint et n’accèdent pas à Gmail.
+La suite vérifie les sessions, le cloisonnement entre utilisateurs et mode public, le chiffrement, la migration des anciennes données, la gestion IMAP, la lecture sans modification des messages et le choix des modèles. Les connexions IMAP et les modèles sont simulés dans ces tests pour ne pas dépendre d’une messagerie ou d’un téléchargement.
 
-Pour vérifier une vraie inférence Julia sur trois mails fictifs, sans compte Gmail :
+Une vérification avec les vrais poids Julia sur trois messages fictifs est également disponible :
 
 ```bash
-LAYA_BACKEND=julia uv run --extra julia python -m app.smoke_julia
+uv run --extra julia python -m app.smoke_julia
 ```
-
-Cette commande charge les vrais poids et vérifie le parcours complet de traitement avec une base SQLite temporaire. Le premier lancement nécessite un accès réseau à Hugging Face, sauf si le checkpoint est déjà en cache ou fourni par chemin local.
-
-Validation du portage : 26 tests passants sur macOS et dans un conteneur Debian Linux ARM64 avec Python 3.12.7 ; trois mails fictifs analysés avec les vrais poids Julia-1 et PyTorch `2.14.1+cpu`, sans échec. Le GPU, Linux x86_64 et une boîte Gmail réelle n’ont pas été testés lors de cette validation. Elle vérifie le fonctionnement, pas la précision du classement sur vos messages.
 
 ## Structure
 
 ```text
 app/
-  gmail.py       OAuth Google et récupération Gmail
-  classifier.py  Adaptateurs Julia/PyTorch, LAYA MLX et démonstration
-  smoke_julia.py Vérification avec les vrais poids sur des mails fictifs
-  db.py          Persistance SQLite
-  runner.py      Exécutions, pause et métriques
+  auth.py        Utilisateurs, sessions et chiffrement des mots de passe IMAP
+  imap.py        Connexion TLS et normalisation des messages MIME
+  classifier.py Adaptateurs LAYA/PyTorch, Julia/PyTorch et moteur de test
+  db.py          Persistance SQLite et propriétaires des données
+  runner.py      Exécutions, choix du modèle, pause et métriques
   main.py        API FastAPI
-  static/        Interface web accessible et responsive
-tests/           Tests ciblés du classement et du parcours complet
+  static/        Interface web
+tests/           Tests du parcours et de l’isolation
 ```
 
-## Limites de cette première version
-
-- Le corps complet et les pièces jointes ne sont pas analysés, seulement `bodyPreview`.
-- Les exécutions sont séquentielles afin de mesurer une latence claire par mail et de contenir l’usage mémoire.
-- Les caches OAuth sont protégés par les permissions du système de fichiers, mais ne sont pas chiffrés applicativement.
-- Les scores reflètent les sorties du modèle et doivent rester une aide au tri, pas une décision de sécurité autonome.
+Les scores sont des aides au tri. Comparez les sorties des deux modèles sur vos messages avant de leur accorder la même confiance.

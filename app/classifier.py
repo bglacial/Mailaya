@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import importlib.util
 import math
 import re
 import threading
@@ -57,6 +56,8 @@ class Classifier(Protocol):
 
     def classify(self, email: dict[str, Any]) -> dict[str, Any]: ...
 
+    def unload(self) -> None: ...
+
 
 class ClassifierLoadError(RuntimeError):
     """A model cannot load; stop the run instead of failing every message."""
@@ -100,7 +101,7 @@ def _extract_choice(answer: Any) -> tuple[str, dict[str, float]]:
 
 
 class LayaClassifier:
-    name = "laya-mlx"
+    name = "laya-pytorch"
 
     def __init__(self, settings: Settings):
         self.settings = settings
@@ -113,17 +114,19 @@ class LayaClassifier:
             return self._agent
         with self._load_lock:
             if self._agent is None:
-                import laya_mlx as laya
-
-                self._agent = laya.load(
-                    self.settings.laya_model,
-                    dtype=self.settings.laya_dtype,
-                    batch_size=16,
-                    compile=True,
-                    pad_to_multiple=16,
-                    cache_prompts=True,
-                )
+                try:
+                    import laya
+                except ImportError as exc:
+                    raise ClassifierLoadError("Le moteur LAYA n’est pas installé. Exécutez uv sync --extra laya.") from exc
+                try:
+                    self._agent = laya.load(self.model, device=self.settings.laya_device)
+                except Exception as exc:
+                    raise ClassifierLoadError(f"Impossible de charger LAYA ({self.model}) : {exc}") from exc
         return self._agent
+
+    def unload(self) -> None:
+        with self._load_lock:
+            self._agent = None
 
     def classify(self, email: dict[str, Any]) -> dict[str, Any]:
         state = {
@@ -133,7 +136,7 @@ class LayaClassifier:
         }
         agent = self._load()
         started = time.perf_counter()
-        prediction = agent.predict(state, QUESTIONS)
+        prediction = agent.predict(state, QUESTIONS, max_len=8192)
         duration_ms = (time.perf_counter() - started) * 1000
         answers = prediction.get("answers", {})
         category, category_scores = _extract_choice(answers.get("category", {}))
@@ -188,6 +191,10 @@ class JuliaClassifier:
                     raise ClassifierLoadError(f"Impossible de charger Julia ({self.model}) : {exc}") from exc
         return self._agent
 
+    def unload(self) -> None:
+        with self._load_lock:
+            self._agent = None
+
     def classify(self, email: dict[str, Any]) -> dict[str, Any]:
         state = {
             "expéditeur": f"{email['sender_name']} <{email['sender_address']}>",
@@ -225,6 +232,9 @@ class DemoClassifier:
         "Personnel": ("dimanche", "famille", "maman", "dîner"),
     }
 
+    def unload(self) -> None:
+        pass
+
     def classify(self, email: dict[str, Any]) -> dict[str, Any]:
         started = time.perf_counter()
         text = f"{email['sender_name']} {email['subject']} {email['body_preview']}".lower()
@@ -257,12 +267,8 @@ def build_classifier(settings: Settings) -> Classifier:
         return DemoClassifier()
     if backend == "julia":
         return JuliaClassifier(settings)
-    if backend in {"laya", "mlx"}:
+    if backend == "laya":
         return LayaClassifier(settings)
     if backend != "auto":
-        raise ValueError("LAYA_BACKEND doit être auto, julia, laya, mlx ou demo.")
-    if settings.is_apple_silicon and importlib.util.find_spec("laya_mlx") is not None:
-        return LayaClassifier(settings)
-    if not settings.is_apple_silicon or importlib.util.find_spec("julia") is not None:
-        return JuliaClassifier(settings)
-    return DemoClassifier()
+        raise ValueError("LAYA_BACKEND doit être auto, julia, laya ou demo.")
+    return JuliaClassifier(settings)

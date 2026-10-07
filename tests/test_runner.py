@@ -52,31 +52,22 @@ def test_demo_run_can_process_all_500_messages(tmp_path, monkeypatch):
     assert len(payload["emails"]) == 500
 
 
-class GmailFixture:
-    def fetch_messages(self, since, limit):
-        assert since == "2026-09-01"
-        assert limit == 1
-        return [
-            {
-                "graph_id": "gmail-1",
-                "sender_name": "Camille",
-                "sender_address": "camille@example.com",
-                "subject": "Réponse attendue",
-                "body_preview": "Pouvez-vous confirmer avant demain ?",
-                "received_at": "2026-09-22T08:00:00+00:00",
-            }
-        ]
-
-
-def test_gmail_source_uses_the_shared_analysis_pipeline(tmp_path):
-    database = Database(tmp_path / "gmail.sqlite3")
-    manager = RunManager(database, DemoClassifier(), {"gmail": GmailFixture()})
-
-    manager.start("gmail", "2026-09-01", 1)
-    payload = wait_for_terminal_state(manager)
-
-    assert payload["run"]["status"] == "complete"
-    assert payload["run"]["source"] == "gmail"
-    assert payload["run"]["processed"] == 1
-    assert payload["emails"][0]["graph_id"] == "gmail-1"
-    assert payload["emails"][0]["action_score"] > 0
+def test_switching_models_releases_the_previous_checkpoint(tmp_path):
+    class Model(DemoClassifier):
+        def __init__(self, name):
+            self.name = name
+            self.model = name
+            self.resident = False
+        def classify(self, email):
+            self.resident = True
+            return super().classify(email)
+        def unload(self):
+            self.resident = False
+    first, second = Model("first"), Model("second")
+    manager = RunManager(Database(tmp_path / "models.sqlite3"), first, {}, classifiers={"second": second})
+    manager.start("demo", "2026-10-01", 1)
+    wait_for_terminal_state(manager)
+    assert first.resident
+    manager.start("demo", "2026-10-01", 1, model_backend="second")
+    wait_for_terminal_state(manager)
+    assert second.resident and not first.resident

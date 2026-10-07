@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import statistics
 import threading
 from datetime import datetime
@@ -14,20 +15,28 @@ ACTIVE_STATUSES = {"queued", "fetching", "running"}
 
 
 class RunManager:
-    def __init__(self, db: Database, classifier: Classifier, providers: dict[str, Any]):
+    def __init__(self, db: Database, classifier: Classifier, providers: dict[str, Any], provider_factory=None,
+                 classifiers: dict[str, Classifier] | None = None):
         self.db = db
         self.classifier = classifier
+        self.classifiers = {classifier.name: classifier, **(classifiers or {})}
         self.providers = providers
-        self._lock = threading.Lock()
+        self.provider_factory = provider_factory
+        self._lock = threading.RLock()
+        self._classifier_lock = threading.Lock()
         self._threads: dict[int, threading.Thread] = {}
 
-    def start(self, source: str, since: str, limit: int) -> int:
-        latest = self.db.latest_run()
-        if latest and latest["status"] in ACTIVE_STATUSES:
-            raise RuntimeError("Une exécution est déjà en cours.")
-        run_id = self.db.create_run(source, since, limit, self.classifier.name)
-        self._launch(run_id)
-        return run_id
+    def start(self, source: str, since: str, limit: int, user_id: int | None = None,
+              imap_account_id: int | None = None, model_backend: str | None = None) -> int:
+        with self._lock:
+            if self.db.active_run(user_id):
+                raise RuntimeError("Une exécution est déjà en cours pour votre compte.")
+            selected = self.classifiers.get(model_backend or self.classifier.name)
+            if selected is None:
+                raise RuntimeError("Ce modèle n’est pas disponible. Choisissez LAYA ou Julia.")
+            run_id = self.db.create_run(source, since, limit, selected.name, user_id, imap_account_id, selected.model)
+            self._launch(run_id)
+            return run_id
 
     def _launch(self, run_id: int) -> None:
         with self._lock:
@@ -43,54 +52,88 @@ class RunManager:
             run = self.db.get_run(run_id)
             if not run:
                 return
+            classifier = self.classifiers.get(run["model_backend"])
+            if classifier is None:
+                raise ClassifierLoadError("Le modèle de cette exécution n’est plus disponible. Lancez une nouvelle analyse.")
             if not run["started_at"]:
                 self.db.set_run(run_id, status="fetching", started_at=utc_now(), error=None)
             if run["total"] == 0:
                 if run["source"] == "demo":
                     messages = demo_messages(run["since_date"], run["requested_limit"])
                 else:
-                    provider = self.providers.get(run["source"])
+                    provider = self.provider_factory(run) if self.provider_factory else self.providers.get(run["source"])
                     if provider is None:
                         raise RuntimeError(f"La source {run['source']} n'est pas disponible.")
                     messages = provider.fetch_messages(run["since_date"], run["requested_limit"])
                 self.db.add_messages(run_id, messages)
-            self.db.set_run(run_id, status="running")
-
-            while True:
-                run = self.db.get_run(run_id)
-                if not run or run["status"] == "paused":
-                    return
-                email = self.db.next_pending_email(run_id)
-                if not email:
-                    break
-                try:
-                    self.db.complete_email(email["id"], self.classifier.classify(email))
-                except ClassifierLoadError:
-                    raise
-                except Exception as exc:  # Keep the batch running when one message is malformed.
-                    self.db.fail_email(email["id"], str(exc))
-
-            final = self.db.get_run(run_id)
-            status = "complete" if final and final["total"] else "empty"
-            self.db.set_run(run_id, status=status, finished_at=utc_now())
+            with self._classifier_lock:
+                with self._lock:
+                    current = self.db.get_run(run_id)
+                    if not current or current["status"] == "paused":
+                        return
+                    self.db.set_run(run_id, status="running")
+                # Keep one checkpoint resident; never swap between individual mails.
+                for other in self.classifiers.values():
+                    if other is not classifier:
+                        other.unload()
+                gc.collect()
+                while True:
+                    run = self.db.get_run(run_id)
+                    if not run or run["status"] == "paused":
+                        return
+                    email = self.db.next_pending_email(run_id)
+                    if not email:
+                        break
+                    try:
+                        self.db.complete_email(email["id"], classifier.classify(email))
+                    except ClassifierLoadError:
+                        raise
+                    except Exception as exc:
+                        self.db.fail_email(email["id"], str(exc))
+                with self._lock:
+                    final = self.db.get_run(run_id)
+                    if final and final["status"] != "paused":
+                        status = "complete" if final["total"] else "empty"
+                        self.db.set_run(run_id, status=status, finished_at=utc_now())
         except Exception as exc:
             self.db.set_run(run_id, status="failed", error=str(exc)[:800], finished_at=utc_now())
+        finally:
+            with self._lock:
+                self._threads.pop(run_id, None)
+                current = self.db.get_run(run_id)
+                # Resume can arrive after a worker decided to pause, but before it exits.
+                if current and current["status"] == "running":
+                    self._launch(run_id)
 
     def pause(self, run_id: int) -> None:
-        run = self.db.get_run(run_id)
-        if not run or run["status"] not in ACTIVE_STATUSES:
-            raise RuntimeError("Cette exécution ne peut pas être mise en pause.")
-        self.db.set_run(run_id, status="paused")
+        with self._lock:
+            run = self.db.get_run(run_id)
+            if not run or run["status"] not in ACTIVE_STATUSES:
+                raise RuntimeError("Cette exécution ne peut pas être mise en pause.")
+            self.db.set_run(run_id, status="paused")
 
     def resume(self, run_id: int) -> None:
-        run = self.db.get_run(run_id)
-        if not run or run["status"] != "paused":
-            raise RuntimeError("Cette exécution n'est pas en pause.")
-        self.db.set_run(run_id, status="running")
-        self._launch(run_id)
+        with self._lock:
+            run = self.db.get_run(run_id)
+            if not run or run["status"] != "paused":
+                raise RuntimeError("Cette exécution n'est pas en pause.")
+            if self.db.active_run(run["user_id"]):
+                raise RuntimeError("Une autre exécution est déjà en cours pour votre compte.")
+            self.db.set_run(run_id, status="running")
+            self._launch(run_id)
 
-    def dashboard(self) -> dict[str, Any]:
-        run = self.db.latest_run()
+    def clear(self, user_id: int | None) -> None:
+        with self._lock:
+            if self.db.active_run(user_id):
+                raise RuntimeError("Mettez l’exécution en pause avant d’effacer les résultats.")
+            for run_id, thread in self._threads.items():
+                run = self.db.get_run(run_id)
+                if thread.is_alive() and run and run["user_id"] == user_id:
+                    raise RuntimeError("La mise en pause est en cours. Réessayez dans quelques secondes.")
+            self.db.clear(user_id)
+
+    def dashboard(self, user_id: int | None = None) -> dict[str, Any]:
+        run = self.db.latest_run(user_id)
         if not run:
             return {"run": None, "emails": [], "metrics": self._metrics(None, [])}
         emails = self.db.emails_for_run(run["id"])

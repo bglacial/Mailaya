@@ -1,4 +1,4 @@
-"""Run real Julia inference against synthetic emails without accessing Gmail."""
+"""Run real Julia inference against synthetic emails without accessing a mailbox."""
 from __future__ import annotations
 
 import json

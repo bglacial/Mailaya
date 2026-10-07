@@ -377,3 +377,18 @@ label > span { color: var(--muted); font-size: 11px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
 }
+
+/* User and IMAP controls reuse the execution panel's form styles. */
+[hidden] { display: none !important; }
+.user-panel { padding: 14px 0; border-bottom: 1px solid var(--border); margin-bottom: 18px; }
+.user-panel summary { cursor: pointer; font-weight: 650; }
+.user-panel p, .model-hint { color: var(--muted); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.account-form { display: grid; gap: 12px; margin: 16px 0; }
+.account-form label { display: grid; gap: 6px; min-width: 0; }
+.account-form input { height: 42px; width: 100%; min-width: 0; padding: 0 12px; color: var(--ink); background: var(--surface); border: 1px solid var(--border); border-radius: 5px; }
+.account-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.imap-item { padding: 12px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.imap-item p { margin: 5px 0; }
+.imap-item .account-actions { margin: 8px 0; }
+#model, #imap-account { width: 100%; padding-right: 8px; }
+#session-note, #imap-note { min-height: 1em; }
