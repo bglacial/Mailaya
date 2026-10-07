@@ -263,7 +263,7 @@ def test_reverse_proxy_subpath_preserves_csrf_sessions_and_assets(api_app):
         page = client.get(prefix + "/")
         assert page.status_code == 200
         assert f'content="{prefix}"' in page.text
-        assert f'href="{prefix}/static/app.css"' in page.text
+        assert f'href="{prefix}/static/app.css?' in page.text
         response = client.post(prefix + "/api/users", json={"username": "Alice", "password": "test-password-12345"}, headers={"Origin": "https://lab.example"})
         assert response.status_code == 201
         assert f"Path={prefix}" in response.headers["set-cookie"]

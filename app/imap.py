@@ -57,9 +57,10 @@ class TextExtractor(HTMLParser):
 
 
 class ImapMailClient:
-    def __init__(self, account: dict[str, Any], password: str):
+    def __init__(self, account: dict[str, Any], password: str, known_ids: set[str] | None = None):
         self.account = account
         self.password = password
+        self.known_ids = known_ids or set()
 
     @contextmanager
     def connection(self):
@@ -110,7 +111,9 @@ class ImapMailClient:
             uids = (data[0] or b"").split() if data else []
             _, validity = client.response("UIDVALIDITY")
             epoch = (validity[0] or b"0").decode("ascii") if validity else "0"
-            for uid in reversed(uids[-limit:]):
+            prefix = f"imap-{self.account['id']}:{self.account['mailbox']}:{epoch}:"
+            unseen = [uid for uid in uids if prefix + uid.decode("ascii") not in self.known_ids]
+            for uid in reversed(unseen[-limit:]):
                 status, response = client.uid("fetch", uid, "(INTERNALDATE BODY.PEEK[])")
                 if status != "OK":
                     raise RuntimeError("La lecture d’un message IMAP a échoué. Réessayez l’analyse.")
@@ -146,6 +149,10 @@ class ImapMailClient:
         if received.tzinfo is None:
             received = received.replace(tzinfo=timezone.utc)
         return {
+            "message_id": str(message.get("Message-ID", "")),
+            "thread_key": (re.findall(r"<[^>]+>", str(message.get("References", ""))) or
+                           re.findall(r"<[^>]+>", str(message.get("In-Reply-To", ""))) or
+                           re.findall(r"<[^>]+>", str(message.get("Message-ID", ""))) or [None])[0],
             "graph_id": f"imap-{self.account['id']}:{self.account['mailbox']}:{validity}:{uid}",
             "sender_name": sender_name or sender_address or "Expéditeur inconnu",
             "sender_address": sender_address,

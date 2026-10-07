@@ -30,7 +30,8 @@ class RunManager:
         self._stopping = False
 
     def start(self, source: str, since: str, limit: int, user_id: int | None = None,
-              imap_account_id: int | None = None, model_backend: str | None = None) -> int:
+              imap_account_id: int | None = None, model_backend: str | None = None,
+              incremental: bool = False) -> int:
         with self._lock:
             if self._stopping:
                 raise RuntimeError("Le service est en cours d’arrêt. Réessayez après son redémarrage.")
@@ -40,6 +41,8 @@ class RunManager:
             if selected is None:
                 raise RuntimeError("Ce modèle n’est pas disponible. Choisissez LAYA ou Julia.")
             run_id = self.db.create_run(source, since, limit, selected.name, user_id, imap_account_id, selected.model)
+            with self.db.connect() as connection:
+                connection.execute("UPDATE runs SET incremental=? WHERE id=?", (int(incremental), run_id))
             self._launch(run_id)
             return run_id
 
@@ -74,6 +77,9 @@ class RunManager:
                         raise RuntimeError(f"La source {run['source']} n'est pas disponible.")
                     messages = provider.fetch_messages(run["since_date"], run["requested_limit"])
                 self.db.add_messages(run_id, messages)
+                if not messages:
+                    self.db.set_run(run_id, status="empty", finished_at=utc_now())
+                    return
             with self._classifier_lock:
                 with self._lock:
                     current = self.db.get_run(run_id)

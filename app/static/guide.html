@@ -1,0 +1,201 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Guide Mailaya</title><link rel="stylesheet" href="__MAILAYA_ROOT__/static/app.css?v=workspace-9"></head><body class="guide-page"><nav><a href="__MAILAYA_ROOT__/">← Revenir à Mailaya</a></nav><article><details open><summary>Sommaire du guide</summary><ol><li><a href="#1-quoi-sert-mailaya">1. À quoi sert Mailaya ?</a></li><li><a href="#2-choisir-une-installation">2. Choisir une installation</a></li><li><a href="#3-param-tres-de-lancement">3. Paramètres de lancement</a></li><li><a href="#4-d-couvrir-l-application-et-cr-er-son-espace">4. Découvrir l’application et créer son espace</a></li><li><a href="#5-ajouter-et-analyser-une-bo-te-imap">5. Ajouter et analyser une boîte IMAP</a></li><li><a href="#6-comprendre-les-scores">6. Comprendre les scores</a></li><li><a href="#7-rechercher-et-organiser">7. Rechercher et organiser</a></li><li><a href="#8-fonctions-par-bo-te-et-synchronisation">8. Fonctions par boîte et synchronisation</a></li><li><a href="#9-connecter-omlx-ollama-ou-une-api">9. Connecter oMLX, Ollama ou une API</a></li><li><a href="#10-brief-quotidien">10. Brief quotidien</a></li><li><a href="#11-recherche-en-langage-naturel">11. Recherche en langage naturel</a></li><li><a href="#12-historique-comparaison-et-exports">12. Historique, comparaison et exports</a></li><li><a href="#13-notifications-navigateur">13. Notifications navigateur</a></li><li><a href="#14-sauvegarde-confidentialit-et-mise-jour">14. Sauvegarde, confidentialité et mise à jour</a></li><li><a href="#15-r-soudre-les-probl-mes-courants">15. Résoudre les problèmes courants</a></li><li><a href="#16-v-rification-technique">16. Vérification technique</a></li></ol></details><h1 id="mailaya-guide-utilisateur-et-installation">Mailaya : guide utilisateur et installation</h1>
+<h2 id="1-quoi-sert-mailaya">1. À quoi sert Mailaya ?</h2>
+<p>Mailaya aide à repérer les demandes importantes dans une ou plusieurs boîtes mail, à retrouver un échange et à suivre ce qui reste à faire. L’application importe des aperçus en lecture seule, les classe avec LAYA ou Julia, puis vous laisse corriger et organiser les résultats.</p>
+<p>Elle ne remplace pas votre messagerie : elle n’envoie pas de réponses, ne déplace pas les mails, ne les supprime pas et ne les marque pas comme lus. « Traité » est votre statut personnel dans Mailaya. Il ne prouve pas qu’une réponse a été envoyée.</p>
+<p>Deux niveaux d’IA sont distincts :</p>
+<ul>
+<li>Le <strong>modèle de classement</strong>, LAYA ou Julia, fonctionne sur la machine qui héberge Mailaya. Il produit catégorie, priorité, spam et action attendue.</li>
+<li>Le <strong>LLM facultatif</strong>, configuré séparément, enrichit le brief et traduit une recherche naturelle en filtres. Il peut tourner sur oMLX ou Ollama, sur la même machine ou un ordinateur du réseau. Un fournisseur externe nécessite une autorisation explicite.</li>
+</ul>
+<p>Vous pouvez utiliser la recherche classique, les règles, le suivi, les corrections, les conversations et les exports sans LLM. Le brief peut également fonctionner par règles locales.</p>
+<h2 id="2-choisir-une-installation">2. Choisir une installation</h2>
+<h3 id="mac-ou-linux-installation-compl-te">Mac ou Linux : installation complète</h3>
+<p>Prérequis : Python 3.11 ou plus récent, <a href="https://docs.astral.sh/uv/getting-started/installation/">uv</a>, accès Internet pour installer les dépendances et télécharger les modèles au premier usage. Installez uv selon sa documentation officielle, puis vérifiez <code>uv --version</code> et <code>python3 --version</code> dans un terminal. Sur macOS et Linux, les deux classeurs utilisent PyTorch. La disponibilité des dépendances dépend aussi de l’architecture de votre machine.</p>
+<p>Récupérez le dossier du projet sur la machine qui hébergera Mailaya, puis ouvrez un terminal dans <code>laya-mail</code>, le dossier contenant <code>pyproject.toml</code>. Par exemple : <code>cd /chemin/vers/mailaya/laya-mail</code>. Les commandes ci-dessous s’exécutent dans ce dossier. Si un fichier <code>.env</code> existe déjà, conservez-le au lieu de l’écraser avec la commande <code>cp</code>.</p>
+<p>Depuis le dossier du projet contenant <code>pyproject.toml</code> :</p>
+<pre><code>
+cp .env.example .env
+uv sync --extra laya --extra julia --extra dev
+uv run --extra laya --extra julia uvicorn app.main:app --host 127.0.0.1 --port 8000
+</code></pre>
+<p>Ouvrez http://127.0.0.1:8000 dans votre navigateur. Le guide est accessible en bas de la navigation ou dans le menu de compte, même sans connexion. Pour arrêter le serveur lancé dans le terminal : Ctrl+C.</p>
+<p>Vous pouvez installer un seul modèle :</p>
+<pre><code>
+uv sync --extra julia
+uv run --extra julia uvicorn app.main:app --host 127.0.0.1 --port 8000
+</code></pre>
+<p>Choisissez alors Julia dans l’interface. LAYA et la comparaison avec LAYA nécessitent l’extra <code>laya</code>. Le moteur signale un runtime absent au lieu de fabriquer des résultats.</p>
+<h3 id="raspberry-pi-commencer-progressivement">Raspberry Pi : commencer progressivement</h3>
+<p>Utilisez un système Linux 64 bits et Python 3.11+. Commencez par l’application et les outils de test :</p>
+<pre><code>
+cp .env.example .env
+uv sync --extra dev
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
+</code></pre>
+<p>L’interface, les comptes, les règles, la recherche et le brief déterministe n’exigent pas PyTorch. Pour classer de nouveaux mails, installez ensuite un runtime compatible avec votre Pi, par exemple <code>uv sync --extra julia</code>, puis redémarrez avec l’extra correspondant. La vitesse et la mémoire des vrais classeurs sur Raspberry Pi n’ont pas été mesurées : commencez avec 12 messages et vérifiez les métriques avant d’augmenter le volume.</p>
+<p>Conseils de réglage :</p>
+<ul>
+<li>Laissez la synchronisation automatique et la comparaison désactivées au départ.</li>
+<li>Si vous activez la synchronisation, commencez avec 12 mails toutes les 30 à 60 minutes.</li>
+<li>Utilisez le brief sans enrichissement LLM sur le Pi.</li>
+<li>Pour les fonctions génératives, associez un serveur oMLX sur un Mac ou Ollama sur une autre machine du réseau.</li>
+<li>La comparaison charge le second classeur sur le serveur Mailaya. Elle ne se fait pas sur oMLX.</li>
+</ul>
+<p>oMLX repose sur Apple Silicon : dans ce scénario, le Pi est client du serveur oMLX sur le Mac.</p>
+<h3 id="acc-s-depuis-une-autre-machine">Accès depuis une autre machine</h3>
+<p><code>127.0.0.1</code> limite l’accès à la machine du serveur. Pour un usage sur votre réseau, vous pouvez écouter sur <code>0.0.0.0</code>, puis ouvrir l’adresse IP du serveur depuis votre navigateur. Avant d’exposer l’application au-delà d’un réseau de confiance, configurez un reverse proxy HTTPS. Les inscriptions sont ouvertes et cette version ne fournit pas de console administrateur ni de récupération de mot de passe.</p>
+<p>Une seule instance et un seul worker Uvicorn sont pris en charge : la file des traitements, les verrous et le planificateur sont locaux au processus. Ne lancez pas plusieurs instances sur la même base.</p>
+<h3 id="garder-mailaya-actif-sur-linux">Garder Mailaya actif sur Linux</h3>
+<p>La synchronisation et le brief automatique ont besoin d’un serveur actif. Après avoir installé et testé les dépendances, vous pouvez créer un service systemd utilisateur. Créez le dossier avec <code>mkdir -p ~/.config/systemd/user</code>, puis le fichier <code>~/.config/systemd/user/mailaya.service</code> avec le contenu suivant, en remplaçant <strong>les deux chemins</strong> par le chemin absolu de votre dossier <code>laya-mail</code> :</p>
+<pre><code>
+[Unit]
+Description=Mailaya - tri et suivi des mails
+
+[Service]
+WorkingDirectory=/CHEMIN/ABSOLU/laya-mail
+ExecStart=/CHEMIN/ABSOLU/laya-mail/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+</code></pre>
+<p>Activez le service avec <code>systemctl --user daemon-reload</code>, puis <code>systemctl --user enable --now mailaya</code>. Consultez son état avec <code>systemctl --user status mailaya</code> et ses journaux avec <code>journalctl --user -u mailaya</code>. Pour conserver le service après déconnexion et le démarrer au démarrage de Linux, un administrateur peut activer la persistance de votre utilisateur avec <code>sudo loginctl enable-linger VOTRE_UTILISATEUR</code>.</p>
+<p>Arrêtez l’instance de terminal avant de lancer le service. Après une mise à jour : <code>systemctl --user restart mailaya</code>. Pour l’arrêter : <code>systemctl --user stop mailaya</code>. Adaptez l’adresse d’écoute uniquement si vous souhaitez un accès réseau, selon les indications précédentes. Cette configuration est un exemple d’installation ; elle n’est pas installée automatiquement par Mailaya.</p>
+<h2 id="3-param-tres-de-lancement">3. Paramètres de lancement</h2>
+<p>Le fichier <code>.env</code> contient les paramètres du serveur, les fonctions quotidiennes se règlent dans l’interface.</p>
+<ul>
+<li><code>LAYA_BACKEND=auto</code> : Julia par défaut pour les commandes sans modèle explicite ; <code>laya</code> choisit LAYA. <code>demo</code> est réservé aux tests déterministes, pas à une analyse réelle de vos mails.</li>
+<li><code>JULIA_CPU_THREADS=4</code> : nombre de threads CPU Julia. Réduisez-le si la machine doit rester disponible pour d’autres services.</li>
+<li><code>LAYA_DEVICE=cpu</code>, <code>JULIA_DEVICE=cpu</code> : traitement sur CPU.</li>
+<li><code>MAX_EMAILS_PER_RUN=500</code> : plafond des lots manuels et automatiques.</li>
+<li><code>MAILAYA_SECURE_COOKIES=true</code> : cookies sécurisés derrière un reverse proxy HTTPS.</li>
+<li><code>LAYA_MAIL_DATA_DIR</code> : dossier des données, <code>data/</code> par défaut. Placez-le sur un disque local protégé.</li>
+</ul>
+<p>Les arguments <code>--host</code> et <code>--port</code> de la commande Uvicorn déterminent l’adresse d’écoute. Modifier uniquement <code>HOST</code> ou <code>PORT</code> dans <code>.env</code> ne modifie pas cette commande. Après modification de <code>.env</code>, redémarrez Mailaya.</p>
+<h2 id="4-d-couvrir-l-application-et-cr-er-son-espace">4. Découvrir l’application et créer son espace</h2>
+<p>L’application comporte quatre espaces accessibles depuis la navigation :</p>
+<ul>
+<li><strong>Messages</strong> : rechercher, consulter un aperçu, corriger le classement et suivre les demandes.</li>
+<li><strong>Brief quotidien</strong> : lire une synthèse pour la boîte choisie, ouvrir ses messages sources et retrouver un brief conservé.</li>
+<li><strong>Analyses</strong> : importer et classer un lot, suivre sa progression, consulter les métriques et comparer les modèles.</li>
+<li><strong>Paramètres</strong> : ajouter des boîtes mail, activer les fonctions par boîte, configurer les connexions IA, les règles et votre compte.</li>
+</ul>
+<p>La navigation est latérale sur ordinateur et horizontale sur écran étroit. Le menu de compte en haut donne accès à la connexion, au guide et à la déconnexion.</p>
+<p>Sans connexion, la démonstration propose 500 messages fictifs. Ses résultats sont partagés entre visiteurs publics. Le modèle sélectionné analyse réellement ces messages, ce qui peut demander un téléchargement et un chargement au premier lancement.</p>
+<p>Pour un espace personnel : ouvrez <strong>Paramètres → Mon compte → Se connecter ou créer un compte</strong>, saisissez un identifiant de 3 à 80 caractères et un mot de passe d’au moins 12 caractères, puis choisissez <strong>Créer mon compte</strong>. Vos comptes IMAP, résultats, règles, vues, connexions LLM et briefs sont isolés des autres utilisateurs.</p>
+<p>La démonstration lancée après connexion appartient à votre espace. Dans <strong>Paramètres → Fonctions par boîte</strong>, <strong>Démonstration personnelle</strong> permet de tester le brief et la recherche naturelle sans importer vos vrais mails.</p>
+<h2 id="5-ajouter-et-analyser-une-bo-te-imap">5. Ajouter et analyser une boîte IMAP</h2>
+<ol>
+<li>Ouvrez <strong>Paramètres → Boîtes mail</strong>, puis <strong>Ajouter une boîte mail</strong>.</li>
+<li>Renseignez un nom, le serveur, l’identifiant et le mot de passe d’application fourni par votre messagerie si nécessaire.</li>
+<li>Choisissez <strong>TLS direct</strong>, généralement port 993, ou <strong>STARTTLS</strong>, généralement port 143.</li>
+<li>Le dossier <code>INBOX</code> désigne habituellement la boîte de réception. Saisissez un autre dossier si besoin.</li>
+<li>Enregistrez puis cliquez sur <strong>Tester</strong>.</li>
+<li>Dans <strong>Analyses</strong>, choisissez IMAP, le compte, la date, le nombre de mails et le modèle de classement.</li>
+<li>Lancez l’analyse. La progression et les erreurs apparaissent dans le panneau de droite.</li>
+</ol>
+<p>La recherche IMAP utilise la date de réception du serveur. Seul un aperçu textuel de 2 000 caractères est conservé et analysé ; les pièces jointes ne sont pas traitées. Une information à la fin d’un long message peut donc être absente du classement, du brief et de la recherche.</p>
+<p><strong>Analyser seulement les nouveaux messages pour ce modèle</strong> est coché par défaut. Mailaya ignore les messages déjà classés avec succès avec ce même modèle et ce même compte/dossier. Les échecs peuvent être retentés. Les identités incluent <code>UIDVALIDITY</code> et l’UID du serveur IMAP. Une remise à zéro côté serveur peut entraîner une nouvelle importation. Changer de modèle permet de produire sa propre analyse, sans réutiliser les prédictions de l’autre.</p>
+<p>Décochez cette option pour forcer une nouvelle analyse. Les résultats précédents restent dans l’historique et les corrections personnelles sont conservées pour la même identité de mail. Une comparaison utilise une copie du lot déjà importé, sans nouvelle connexion IMAP.</p>
+<h2 id="6-comprendre-les-scores">6. Comprendre les scores</h2>
+<ul>
+<li><strong>Catégorie</strong> : classe proposée par le modèle. Cliquez sur l’objet d’un message pour ouvrir le volet de lecture, puis dépliez <strong>Comprendre le classement</strong> pour voir la prédiction initiale et les scores des catégories.</li>
+<li><strong>Priorité</strong> : score de 0 à 100, affiché comme Basse, Normale, Haute à partir de 58, Critique à partir de 82.</li>
+<li><strong>Spam</strong> : indication de risque, pas un diagnostic de sécurité.</li>
+<li><strong>Action</strong> : indication qu’une intervention est attendue, pas une preuve que vous devez répondre.</li>
+<li><strong>Temps</strong> : durée d’inférence du message ; le premier traitement peut inclure le chargement du modèle.</li>
+</ul>
+<p>Les scores sont des aides au tri. La vue <strong>À vérifier</strong> signale les catégories dont le score maximal est inférieur à 0,6 ou dont les deux meilleurs scores sont séparés de moins de 0,15. Ces seuils sont heuristiques, ils ne constituent pas une mesure de confiance calibrée. Un message corrigé ou classé par une règle n’est plus présenté comme ambigu selon cette heuristique.</p>
+<h2 id="7-rechercher-et-organiser">7. Rechercher et organiser</h2>
+<h3 id="recherche-classique-et-vues">Recherche classique et vues</h3>
+<p>Dans <strong>Rechercher dans les messages importés</strong>, saisissez une expression présente dans l’expéditeur, l’objet ou l’aperçu. La recherche est insensible aux majuscules. Elle porte sur les données importées dans votre espace, pas sur l’ensemble de votre boîte distante.</p>
+<p>Dépliez <strong>Filtres</strong> pour combiner expéditeur, catégorie exacte, dates, seuils de priorité/action/spam et suivi personnel, puis choisissez <strong>Appliquer les filtres</strong>. Les filtres se cumulent. Leur résumé apparaît au-dessus de la liste ; <strong>Réinitialiser</strong> revient à la vue complète. Les dates de filtrage des résultats correspondent aux dates UTC stockées ; l’affichage des heures utilise votre navigateur.</p>
+<ul>
+<li><strong>Tous</strong> affiche le dernier résultat importé de chaque identité de mail.</li>
+<li><strong>À traiter</strong> retient les messages classés avec priorité au moins 58, action au moins 50 et statut personnel À faire.</li>
+<li><strong>À vérifier</strong> retient les classements ambigus selon les seuils ci-dessus.</li>
+</ul>
+<p>Les résultats sont affichés par pages de 50. Ouvrez <strong>Vue et export</strong>, saisissez un nom puis <strong>Enregistrer la vue</strong> pour conserver une combinaison de filtres. Retrouvez-la dans <strong>Vues favorites</strong>. La vue conserve aussi un éventuel choix d’analyse historique.</p>
+<h3 id="corriger-traiter-et-reporter">Corriger, traiter et reporter</h3>
+<p>Cliquez sur l’objet d’un message. Le volet affiche l’aperçu et <strong>Mon suivi</strong> : choisissez <strong>À faire</strong>, <strong>Traité</strong> ou <strong>Reporté</strong>, puis <strong>Enregistrer</strong>. Un report dévoile le champ de date et nécessite une date future ; le message revient à À faire quand cette date est passée, lors de la prochaine consultation. Pour modifier catégorie ou priorité, dépliez <strong>Corriger le classement</strong>.</p>
+<p>Une saisie non enregistrée reste conservée lorsque vous passez à une autre page ou que les résultats s’actualisent. Enregistrez ou cliquez sur <strong>Annuler</strong> avant de changer de message ou de fermer le volet. Sur écran étroit, le volet prend la place de la liste ; <strong>Fermer</strong> revient aux messages.</p>
+<p>Laisser catégorie/priorité vides conserve la décision des règles ou du modèle. <strong>Retirer mes corrections</strong> vide ces champs ; cliquez ensuite sur <strong>Enregistrer</strong> pour appliquer le changement. La prédiction initiale n’est jamais remplacée. Les corrections ne déclenchent pas de réentraînement.</p>
+<h3 id="r-gles-personnelles">Règles personnelles</h3>
+<p>Dans <strong>Paramètres → Règles de tri</strong>, sélectionnez la boîte concernée puis <strong>Ajouter une règle</strong>. Indiquez un texte à retrouver dans l’adresse expéditeur, l’objet ou l’objet et l’aperçu, puis la catégorie et/ou la priorité à appliquer.</p>
+<p>La première règle correspondante, dans l’ordre de création, gagne. Une correction manuelle prend ensuite le dessus sur les champs que vous avez corrigés. Une règle s’applique immédiatement à la présentation des résultats, sans relancer l’IA. Supprimer une règle rétablit la décision du modèle ou une autre règle correspondante.</p>
+<h3 id="conversations">Conversations</h3>
+<p>Cochez <strong>Regrouper les conversations</strong> dans les filtres. Les mails sont regroupés à l’intérieur d’un même compte à partir de leurs en-têtes de réponse et de référence. Si ces informations sont absentes, Mailaya utilise l’objet normalisé et l’expéditeur : ce regroupement est une approximation. Le nombre affiché porte sur les messages correspondant aux filtres.</p>
+<p>Ouvrez la ligne puis <strong>Ouvrir cette conversation</strong> pour voir les messages filtrés de cet échange. <strong>Rechercher</strong> quitte la conversation et revient à la liste.</p>
+<h2 id="8-fonctions-par-bo-te-et-synchronisation">8. Fonctions par boîte et synchronisation</h2>
+<p>Dans <strong>Paramètres → Fonctions par boîte</strong>, sélectionnez la boîte avant d’activer une fonction, puis cliquez sur <strong>Enregistrer les fonctions</strong>. Les réglages d’une boîte ne sont pas copiés aux autres. Les options détaillées apparaissent à l’activation : fréquence de synchronisation, horaire du brief, connexion IA ou autorisation de notification. <strong>Annuler</strong> retrouve les derniers réglages enregistrés. Un changement de boîte est bloqué tant que vos modifications restent non enregistrées.</p>
+<p>La synchronisation automatique est désactivée par défaut. Vous choisissez un intervalle de 5 à 1 440 minutes, un maximum de 1 à 500 messages par passage et le modèle local. Le plafond global <code>MAX_EMAILS_PER_RUN</code> reste applicable. Les passages automatiques recherchent les messages des 30 derniers jours ; pour importer des messages plus anciens, lancez une analyse manuelle avec une autre date.</p>
+<p>Le planificateur vérifie les fonctions toutes les 30 secondes, uniquement lorsque le serveur tourne. Une analyse active ou en pause sur ce compte retarde le passage. Une erreur est affichée dans les réglages du compte ; le passage suivant respecte l’intervalle configuré. Aucun passage n’est rattrapé serveur éteint.</p>
+<p>Les classements LAYA/Julia, les briefs enrichis et les recherches naturelles partagent une limite d’un calcul à la fois sur Mailaya. Cela limite la concurrence mais ne garantit pas qu’un modèle volumineux tient dans la RAM du Pi. Une génération LLM en attente peut prendre du temps.</p>
+<h2 id="9-connecter-omlx-ollama-ou-une-api">9. Connecter oMLX, Ollama ou une API</h2>
+<p>Ouvrez <strong>Paramètres → Connexions IA → Ajouter une connexion</strong>, choisissez le fournisseur et cliquez sur <strong>Récupérer les modèles disponibles</strong>. Choisissez un modèle de conversation dans le catalogue, puis <strong>Enregistrer la connexion</strong>. Dans <strong>Fonctions par boîte</strong>, associez cette connexion à la boîte voulue, après avoir activé la recherche naturelle ou l’enrichissement du brief.</p>
+<p>Adresses usuelles :</p>
+<ul>
+<li>oMLX sur le même Mac que Mailaya : <code>http://127.0.0.1:11435/v1</code>.</li>
+<li>Ollama sur la même machine : <code>http://127.0.0.1:11434</code>, sans suffixe <code>/v1</code> pour le protocole natif.</li>
+<li>Serveur oMLX sur un Mac du réseau : par exemple <code>http://192.168.1.20:11435/v1</code>, à remplacer par son adresse réelle. Le serveur oMLX doit accepter les connexions du réseau ; un service limité à 127.0.0.1 ne sera pas accessible depuis le Pi.</li>
+<li>OpenAI : <code>https://api.openai.com/v1</code>, clé API et autorisation explicite de traitement distant. Cette option utilise la clé API, pas l’abonnement ChatGPT.</li>
+</ul>
+<p><strong>L’adresse est vue depuis le serveur Mailaya.</strong> Si vous ouvrez l’interface du Pi depuis un Mac, <code>127.0.0.1</code> désigne le Pi, pas le Mac. Le navigateur n’appelle jamais directement le serveur LLM et ne reçoit pas la clé enregistrée.</p>
+<p>Les clés sont chiffrées avec la clé locale du serveur. Pour modifier une connexion, vous pouvez laisser la clé vide pour la conserver si l’adresse et le protocole restent identiques. Après changement de destination, ressaisissez la clé nécessaire. Supprimer une connexion désactive son utilisation : les comptes qui la sélectionnaient doivent être reconfigurés.</p>
+<p>Les serveurs publics nécessitent <strong>J’autorise ce fournisseur externe...</strong> et HTTPS. Les adresses locales ou privées sont accessibles sans cette autorisation de fournisseur externe ; cela ne signifie pas que le serveur privé choisi ne transmet jamais ses propres données ailleurs. Choisissez un service que vous maîtrisez.</p>
+<p>La découverte exclut les identifiants courants de modèles d’embeddings et de synthèse vocale. Un modèle restant dans la liste peut encore être incompatible avec la génération de JSON : essayez un autre modèle si nécessaire.</p>
+<h2 id="10-brief-quotidien">10. Brief quotidien</h2>
+<p>Dans <strong>Paramètres → Fonctions par boîte</strong>, cochez <strong>Activer le brief</strong> et enregistrez. Sans <strong>Enrichir les résumés avec un LLM</strong>, le brief est entièrement déterministe et local : nouveaux messages du jour, demandes encore à faire, aperçu des demandes et extraits mentionnant une échéance.</p>
+<p>Le brief utilise vos derniers résultats classés et vos statuts personnels. Il retient jusqu’à 20 demandes À faire avec action au moins 50 et spam inférieur à 70, triées par priorité. Les anciennes demandes non traitées peuvent rester présentes. S’il manque un mail, vérifiez l’importation, les scores et le statut.</p>
+<p>Pour un résumé génératif, choisissez une connexion puis activez l’enrichissement LLM. Seuls les objets et jusqu’à 500 caractères d’aperçu des 12 premières demandes sélectionnées sont transmis. Les secrets IMAP ne sont jamais transmis. Les résumés affichent les messages sources, dont les identifiants sont vérifiés avant conservation. Cela ne garantit pas l’exactitude du résumé : relisez les sources avant d’agir.</p>
+<p>Ouvrez <strong>Brief quotidien</strong>, sélectionnez la <strong>Boîte concernée</strong>, puis cliquez sur <strong>Préparer le brief</strong> pour le produire ou le rafraîchir. Ce sélecteur est indépendant du filtre des messages et de la boîte ouverte dans les paramètres. Si le brief est désactivé, <strong>Configurer ce brief</strong> ouvre les réglages de cette boîte.</p>
+<p><strong>Préparer automatiquement chaque jour</strong>, dans les réglages, utilise l’heure et le fuseau configurés, par défaut 8 h, Europe/Paris. Il prépare au plus un brief réussi par jour ; en cas d’erreur, une nouvelle tentative attend au moins 30 minutes. Le serveur doit rester actif.</p>
+<p>Les briefs sont conservés par jour et par compte ; le sélecteur affiche les 30 derniers jours conservés. Une nouvelle préparation du même jour remplace le brief de ce jour. Les liens ouvrent l’aperçu importé, pas votre messagerie distante.</p>
+<h2 id="11-recherche-en-langage-naturel">11. Recherche en langage naturel</h2>
+<p>Associez une connexion LLM et activez <strong>Recherche en langage naturel</strong> dans <strong>Paramètres → Fonctions par boîte</strong>, puis enregistrez. Dans <strong>Messages</strong>, ouvrez <strong>Recherche en langage naturel</strong>, sélectionnez la <strong>Boîte concernée</strong>, décrivez votre demande et cliquez sur <strong>Trouver les messages</strong>. Ce choix est indépendant du filtre de la liste et de la boîte ouverte dans les paramètres. Si la fonction est désactivée ou sans connexion, un lien vous conduit aux réglages de cette boîte.</p>
+<p>Exemples : « Les demandes de devis encore à faire cette semaine », « Les messages prioritaires de Camille », « Les newsletters reçues depuis lundi ».</p>
+<p>Le modèle reçoit votre demande, la date, le fuseau et les noms des catégories disponibles, sans les objets ni les aperçus de vos mails. Il la traduit en filtres autorisés, ensuite appliqués aux messages de votre compte. Une catégorie inconnue peut être interprétée comme un texte à rechercher plutôt que comme une catégorie inexistante. Après la recherche, le formulaire se replie pour laisser place aux résultats. L’interprétation et le résumé des filtres restent visibles ; dépliez <strong>Filtres</strong> pour les corriger ou rouvrez <strong>Recherche en langage naturel</strong> pour changer votre demande. Il ne génère pas de SQL et ne peut pas changer de propriétaire ou de compte.</p>
+<p>Cette recherche interprète des intentions de filtrage ; ce n’est pas une recherche sémantique par embeddings. Elle ne peut pas retrouver un concept absent de l’aperçu ni vérifier vos réponses dans un dossier Envoyés non importé. « Sans réponse » est interprété comme le statut personnel À faire.</p>
+<h2 id="12-historique-comparaison-et-exports">12. Historique, comparaison et exports</h2>
+<p>Dans <strong>Analyses</strong>, <strong>Historique et comparaison</strong> affiche les 200 analyses les plus récentes. Choisissez un lot puis <strong>Afficher les messages</strong> pour ouvrir sa liste. Consulter une analyse ne relance pas le traitement. La liste principale montre autrement le dernier résultat importé par identité de mail.</p>
+<p>Pour comparer : activez <strong>Comparaison LAYA / Julia</strong> sur la boîte concernée, sélectionnez une analyse terminée dans l’historique et cliquez sur <strong>Comparer avec l’autre modèle</strong>. Le deuxième modèle reçoit exactement les mêmes aperçus importés. Les traitements restent séquentiels, sans charger simultanément les deux classeurs.</p>
+<p>Les résultats montrent les catégories, les désaccords et les durées par mail. Si vous avez corrigé des catégories, la comparaison calcule le taux de correspondance aux corrections sur cet échantillon. Sans corrections, elle ne prétend pas mesurer la qualité. Les durées peuvent inclure un premier chargement : ce n’est pas un benchmark de performance contrôlé.</p>
+<p>Dans <strong>Messages → Vue et export</strong>, <strong>Exporter CSV</strong> et <strong>Exporter JSON</strong> exportent tous les messages correspondant aux filtres, au-delà de la page affichée. Le CSV comprend la catégorie/priorité appliquées et celles initialement prédites. Les textes susceptibles d’être interprétés comme formules sont neutralisés. Le JSON conserve davantage de détails, dont les scores, aperçus et corrections. Les exports contiennent des données personnelles : choisissez leur destination en conséquence.</p>
+<h2 id="13-notifications-navigateur">13. Notifications navigateur</h2>
+<p>Dans <strong>Paramètres → Fonctions par boîte</strong>, cochez <strong>Être prévenu lorsque c’est prêt</strong>, cliquez sur <strong>Autoriser les notifications navigateur</strong>, puis enregistrez. Le navigateur conserve le choix d’autorisation. HTTPS ou localhost est nécessaire.</p>
+<p>Les notifications signalent une fin d’analyse, un échec ou la disponibilité d’un brief et ne contiennent pas le texte des mails. Elles fonctionnent lorsque la page est ouverte et détecte un changement ; les restrictions du navigateur peuvent empêcher leur affichage. Il n’existe pas de service push qui réveille un navigateur fermé. Désactivez la case du compte ou révoquez l’autorisation du site pour les arrêter.</p>
+<h2 id="14-sauvegarde-confidentialit-et-mise-jour">14. Sauvegarde, confidentialité et mise à jour</h2>
+<p>Sauvegardez ensemble le dossier des données, la base <code>laya-mail.sqlite3</code> et la clé <code>imap.key</code>. Arrêtez le service avant une copie de fichiers pour inclure de manière cohérente la base et ses journaux SQLite. Conservez la sauvegarde dans un emplacement protégé.</p>
+<p>La clé chiffre les mots de passe IMAP et les clés API. Les mots de passe de connexion sont hachés. Les aperçus, règles, corrections et briefs restent dans SQLite sans chiffrement applicatif du contenu. Perdre la clé oblige à ressaisir les secrets, sans effacer les résultats.</p>
+<p>La migration vers ces fonctions est additive et conserve les résultats existants. Après une mise à jour du code, synchronisez les dépendances puis redémarrez. Ne revenez pas simplement à une ancienne version du code sur une base modifiée sans sauvegarde préalable.</p>
+<p>Dans <strong>Analyses → Gestion des résultats</strong>, <strong>Effacer mes résultats</strong> demande une confirmation dans la page avant de supprimer toutes vos analyses et leurs messages importés. Vos mails distants restent dans votre messagerie. Les réglages, règles, vues, corrections et briefs sont conservés ; les liens d’un ancien brief peuvent devenir indisponibles. Une nouvelle importation de la même identité de message peut réappliquer vos corrections. Les corrections et briefs ne disposent pas encore d’un bouton de purge global.</p>
+<h2 id="15-r-soudre-les-probl-mes-courants">15. Résoudre les problèmes courants</h2>
+<ul>
+<li><strong>Runtime absent</strong> : installez l’extra du modèle sélectionné et redémarrez avec cet extra. Ne choisissez pas LAYA si seul Julia est installé.</li>
+<li><strong>Chargement long</strong> : le premier usage télécharge les poids, les analyses suivantes rechargent le modèle en mémoire. Réduisez le lot et consultez les métriques.</li>
+<li><strong>Aucun nouveau message</strong> : vérifiez la date et le dossier ; une synchronisation incrémentale peut légitimement ne rien trouver. Décochez l’option pour une nouvelle analyse complète.</li>
+<li><strong>Erreur IMAP</strong> : vérifiez le serveur, TLS, le port, le nom de dossier et le mot de passe d’application. Le certificat n’est jamais ignoré.</li>
+<li><strong>Serveur LLM inaccessible</strong> : vérifiez l’adresse depuis la machine Mailaya, le port d’écoute et le catalogue. Sur un Pi, n’utilisez pas localhost pour un serveur situé sur le Mac.</li>
+<li><strong>HTTP 401 ou 403 LLM</strong> : vérifiez la clé API et les permissions du serveur.</li>
+<li><strong>HTTP 507 ou manque de mémoire</strong> : choisissez un modèle plus petit sur le serveur LLM, désactivez l’enrichissement ou utilisez le brief déterministe.</li>
+<li><strong>JSON invalide ou génération tronquée</strong> : changez de modèle ; aucun brief invalide n’est conservé. Les filtres de recherche sont validés avant utilisation.</li>
+<li><strong>Session expirée</strong> : reconnectez-vous. Les sessions expirent après sept jours ; changer votre mot de passe ferme vos autres sessions.</li>
+<li><strong>Analyse en pause</strong> : reprenez-la ou effacez les résultats pour débloquer les changements de paramètres IMAP. La synchronisation ne la remplace pas.</li>
+<li><strong>Notifications absentes</strong> : vérifiez l’autorisation du site, le contexte HTTPS, la case du compte et que la page reste ouverte.</li>
+</ul>
+<h2 id="16-v-rification-technique">16. Vérification technique</h2>
+<p>Les tests automatisés utilisent des mails fictifs, des serveurs IMAP simulés et des classeurs simulés. Ils couvrent aussi de vrais processus isolés avec un moteur de test, sans prouver la performance des poids réels sur votre machine.</p>
+<pre><code>
+uv run --extra dev pytest
+node --check app/static/app.js
+node --check app/static/workspace.js
+node --check app/static/ui.js
+</code></pre>
+<p>Pour vérifier le classement Julia avec les vrais poids sur trois messages fictifs, installez Julia puis exécutez <code>uv run --extra julia python -m app.smoke_julia</code>. Le script séparé <code>scripts/smoke_omlx.py</code> vérifie le catalogue, le brief et la recherche naturelle avec le serveur oMLX, dans une base temporaire et sans lire vos vrais mails.</p>
+<p>Par exemple, après avoir vérifié la présence du modèle dans votre catalogue :</p>
+<pre><code>
+uv run --extra dev python scripts/smoke_omlx.py --url http://127.0.0.1:11435/v1 --model Qwen3-8B-4bit
+</code></pre>
+<p>Adaptez l’URL et le modèle à votre serveur. Le script n’installe pas ce modèle : il utilise celui disponible sur oMLX. Il affiche les résultats et écrit une preuve JSON dans le dossier temporaire du système ; <code>--output /chemin/preuve.json</code> permet de choisir sa destination.</p>
+<p>La documentation interactive des endpoints est disponible sur <code>/api/docs</code>. La version HTML de ce guide est générée depuis ce fichier par <code>python scripts/build_guide.py</code> ; après modification du guide, régénérez-la pour garder l’aide embarquée à jour.</p></article></body></html>

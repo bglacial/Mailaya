@@ -97,6 +97,8 @@ class Database:
             if "model" not in columns:
                 connection.execute("ALTER TABLE runs ADD COLUMN model TEXT")
             connection.execute("CREATE INDEX IF NOT EXISTS runs_user ON runs(user_id, id)")
+            from .workspace import initialize
+            initialize(connection)
         self.path.chmod(0o600)
 
     def create_run(self, source: str, since_date: str, limit: int, backend: str,
@@ -157,6 +159,8 @@ class Database:
                 VALUES (:run_id, :graph_id, :sender_name, :sender_address, :subject, :body_preview, :received_at)""",
                 [{**message, "run_id": run_id} for message in messages],
             )
+            connection.executemany("UPDATE emails SET thread_key=?,message_id=? WHERE run_id=? AND graph_id=?",
+                                   [(m.get("thread_key"), m.get("message_id"), run_id, m["graph_id"]) for m in messages])
             total = connection.execute("SELECT COUNT(*) FROM emails WHERE run_id = ?", (run_id,)).fetchone()[0]
             connection.execute("UPDATE runs SET total = ? WHERE id = ?", (total, run_id))
 

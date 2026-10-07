@@ -75,7 +75,7 @@ function renderMatrix(email) {
   row.className = "matrix-row";
   row.dataset.open = state.expanded.has(email.id) ? "true" : "false";
   const cell = document.createElement("td");
-  cell.colSpan = 7;
+  cell.colSpan = 4;
   const panel = document.createElement("div");
   panel.className = "matrix-panel";
   panel.id = `matrix-${email.id}`;
@@ -93,61 +93,30 @@ function renderMatrix(email) {
     item.append(line);
     panel.append(item);
   }
+  cell.append(text("p", `Spam ${formatNumber(email.spam_score)} % · Action ${formatNumber(email.action_score)} % · Inférence ${formatNumber(email.duration_ms,1)} ms.`));
   cell.append(panel);
   row.append(cell);
   return row;
 }
 
 function renderRows(emails) {
-  const tbody = $("mail-rows");
-  tbody.replaceChildren();
-  const filter = $("category-filter").value;
-  const filtered = emails.filter((email) => filter === "all" || email.category === filter);
-  $("empty-state").hidden = emails.length > 0;
-
-  for (const email of filtered) {
-    const row = document.createElement("tr");
-    row.dataset.status = email.status;
-
-    const sender = document.createElement("div");
-    sender.append(text("div", email.sender_name, "sender-name"), text("div", email.sender_address, "sender-address"));
-    row.append(makeCell(sender, "sender-cell"));
-
-    const subject = document.createElement("div");
-    subject.append(text("div", email.subject, "subject"), text("div", email.body_preview, "preview"));
-    row.append(makeCell(subject, "subject-cell"));
-
-    if (email.status === "complete") {
-      const categoryButton = text("button", email.category, "category-button");
-      categoryButton.type = "button";
-      categoryButton.setAttribute("aria-expanded", state.expanded.has(email.id) ? "true" : "false");
-      categoryButton.setAttribute("aria-controls", `matrix-${email.id}`);
-      categoryButton.title = "Afficher la matrice de probabilités";
-      categoryButton.addEventListener("click", () => {
-        state.expanded.has(email.id) ? state.expanded.delete(email.id) : state.expanded.add(email.id);
-        renderRows(state.dashboard.emails);
-      });
-      row.append(makeCell(categoryButton));
-      const priority = priorityLabel(email.priority_score);
-      const priorityNode = text("span", priority.label, "priority-label");
-      priorityNode.dataset.level = priority.level;
-      priorityNode.title = `${formatNumber(email.priority_score, 1)} sur 100`;
-      row.append(makeCell(priorityNode));
-      row.append(makeCell(scoreNode(email.spam_score)));
-      row.append(makeCell(scoreNode(email.action_score)));
-      row.append(makeCell(`${formatNumber(email.duration_ms, 1)} ms`, "numeric"));
-    } else if (email.status === "failed") {
-      row.append(makeCell("Échec", "pending-copy"));
-      const error = text("span", "Voir le journal", "pending-copy");
-      error.title = email.error || "Erreur inconnue";
-      row.append(makeCell(error));
-      row.append(makeCell("–"), makeCell("–"), makeCell("–"));
-    } else {
-      row.append(makeCell("En attente", "pending-copy"));
-      row.append(makeCell("–"), makeCell("–"), makeCell("–"), makeCell("–"));
-    }
+  if (window.MailayaWorkspace?.renderRows(emails)) return;
+  const tbody=$("mail-rows"); tbody.replaceChildren();
+  const filter=$("category-filter").value;
+  const filtered=emails.filter(email=>filter==="all"||email.category===filter);
+  $("empty-state").hidden=filtered.length>0;
+  for(const email of filtered) {
+    const row=document.createElement("tr"); row.dataset.status=email.status;
+    const message=text("div", ""); message.append(text("div",email.sender_name,"sender-name"),text("div",email.subject,"subject"),text("div",email.body_preview,"preview"));
+    row.append(makeCell(message));
+    if(email.status==="complete") {
+      const category=text("button",email.category,"category-button"); category.type="button"; category.setAttribute("aria-expanded",String(state.expanded.has(email.id))); category.setAttribute("aria-controls",`matrix-${email.id}`); category.title="Comprendre le classement";
+      category.addEventListener("click",()=>{state.expanded.has(email.id)?state.expanded.delete(email.id):state.expanded.add(email.id);renderRows(state.dashboard.emails);});
+      const priority=priorityLabel(email.priority_score), value=text("span",priority.label,"priority-label"); value.dataset.level=priority.level; value.title=`${email.priority_score}/100`;
+      row.append(makeCell(category),makeCell(value),makeCell("–"));
+    } else row.append(makeCell(email.status==="failed"?"Échec":"En attente"),makeCell("–"),makeCell("–"));
     tbody.append(row);
-    if (email.status === "complete") tbody.append(renderMatrix(email));
+    if(email.status==="complete") tbody.append(renderMatrix(email));
   }
 }
 
@@ -221,9 +190,13 @@ function renderSession(user) {
   if (user) $("source").add(new Option("IMAP", "imap"));
   $("source").value = user && source === "imap" ? "imap" : "demo";
   if (!user) $("imap-selector").hidden = true;
+  window.MailayaWorkspace?.session(user);
+  window.MailayaUI?.session(user);
 }
 
 function resetDashboard() {
+  window.MailayaWorkspace?.reset();
+  window.MailayaUI?.reset();
   state.generation += 1;
   state.dashboard = null;
   state.expanded.clear();
@@ -321,6 +294,7 @@ function renderDashboard(payload) {
   else if (status === "complete") $("system-note").textContent = `Terminé avec ${run.model || payload.configuration.backend}.`;
   else $("system-note").textContent = "Prêt pour une démonstration locale.";
 
+  $("analysis-nav-dot").hidden = !active;
   schedulePoll(active);
 }
 
@@ -333,7 +307,10 @@ async function loadDashboard() {
   const generation = state.generation;
   try {
     const payload = await api("/api/dashboard");
-    if (generation === state.generation) renderDashboard(payload);
+    if (generation === state.generation) {
+      renderDashboard(payload);
+      await window.MailayaWorkspace?.refresh(payload, generation);
+    }
   } catch (error) {
     if (generation !== state.generation) return;
     if (error.status === 401) {
@@ -367,6 +344,7 @@ async function handleRun(event) {
           limit: Number($("limit").value),
           model: $("model").value,
           imap_account_id: $("source").value === "imap" ? Number($("imap-account").value) : null,
+          incremental: $("incremental").checked,
         }),
       });
     }
@@ -452,11 +430,14 @@ async function saveAccount(event) {
   }
 }
 
-async function clearResults() {
+async function clearResults(confirmed = false) {
   if (!state.dashboard?.run) return;
+  if (!confirmed) { $("clear-confirm").hidden = false; return; }
   try {
     await api("/api/results", { method: "DELETE" });
     state.expanded.clear();
+    $("clear-confirm").hidden = true;
+    window.MailayaWorkspace?.reset();
     await loadDashboard();
   } catch (error) {
     $("system-note").textContent = error.message;
@@ -470,7 +451,8 @@ $("source").addEventListener("change", () => {
 });
 $("category-filter").addEventListener("change", () => renderRows(state.dashboard?.emails || []));
 $("imap-account").addEventListener("change", () => { if (state.dashboard) renderDashboard(state.dashboard); });
-$("clear-results").addEventListener("click", clearResults);
+$("clear-results").addEventListener("click", () => clearResults());
+$("confirm-clear").addEventListener("click", () => clearResults(true));
 $("new-run").addEventListener("click", () => {
   if (!state.dashboard || ["queued", "fetching", "running"].includes(state.dashboard.run?.status)) return;
   state.generation += 1;

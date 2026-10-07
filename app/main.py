@@ -56,6 +56,7 @@ class RunRequest(BaseModel):
     limit: int = Field(default=100, ge=1, le=5000)
     imap_account_id: int | None = Field(default=None, ge=1)
     model: Literal["laya", "julia"] | None = None
+    incremental: bool = True
 
 
 settings = get_settings()
@@ -70,7 +71,11 @@ def provider_for(run: dict):
     account = runner.db.imap_account(run["imap_account_id"], run["user_id"])
     if not account:
         raise RuntimeError("Ce compte IMAP n’est plus disponible. Choisissez un autre compte.")
-    return ImapMailClient(account, secrets_store.decrypt(account["password_encrypted"]))
+    from .workspace import Workspace
+    known = Workspace(runner.db).known_ids(run["user_id"], account["id"], run["model_backend"]) if run.get("incremental") else set()
+    provider = ImapMailClient(account, secrets_store.decrypt(account["password_encrypted"]))
+    provider.known_ids = known
+    return provider
 
 
 classifier = build_process_classifier(settings)
@@ -81,13 +86,17 @@ runner = RunManager(database, classifier, {}, provider_factory=provider_for,
 
 @asynccontextmanager
 async def lifespan(app):
+    from .workspace_api import WorkspaceScheduler
+    scheduler = WorkspaceScheduler(__import__(__name__, fromlist=["runner"]))
+    scheduler.start()
     try:
         yield
     finally:
+        scheduler.stop()
         runner.shutdown()
 
 
-app = FastAPI(title="Mailaya", version="0.3.1", docs_url="/api/docs", redoc_url=None, lifespan=lifespan)
+app = FastAPI(title="Mailaya", version="0.4.0", docs_url="/api/docs", redoc_url=None, lifespan=lifespan)
 static_dir = Path(__file__).resolve().parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
@@ -145,7 +154,16 @@ def set_session(request: Request, response: Response, user: dict):
 @app.get("/", include_in_schema=False)
 def index(request: Request) -> HTMLResponse:
     root = html.escape(request.scope.get("root_path", "").rstrip("/"), quote=True)
-    return HTMLResponse((static_dir / "index.html").read_text().replace("__MAILAYA_ROOT__", root))
+    source = (static_dir / "index.html").read_text()
+    for fragment in ("triage", "workspace-settings"):
+        source = source.replace(f"__{fragment.upper().replace('-', '_')}__", (static_dir / f"{fragment}.html").read_text())
+    return HTMLResponse(source.replace("__MAILAYA_ROOT__", root))
+
+
+@app.get("/guide", include_in_schema=False)
+def guide(request: Request) -> HTMLResponse:
+    root = html.escape(request.scope.get("root_path", "").rstrip("/"), quote=True)
+    return HTMLResponse((static_dir / "guide.html").read_text().replace("__MAILAYA_ROOT__", root))
 
 
 @app.get("/api/health")
@@ -232,7 +250,8 @@ def start_run(body: RunRequest, user: Visitor) -> dict:
                 owned_account(body.imap_account_id, user)
             run_id = runner.start(body.source, body.since_date.isoformat(), body.limit,
                                   user["id"] if user else None, body.imap_account_id,
-                                  f"{body.model}-pytorch" if body.model else None)
+                                  f"{body.model}-pytorch" if body.model else None,
+                                  incremental=body.incremental and body.source == "imap")
     except RuntimeError as exc:
         raise HTTPException(409, str(exc)) from exc
     return {"run_id": run_id, "status": "queued"}
@@ -320,3 +339,10 @@ def delete_imap_account(account_id: int, user: User) -> None:
         if runner.db.account_in_use(account_id, user["id"]):
             raise HTTPException(409, "Terminez l’analyse ou effacez ses résultats avant de supprimer ce compte.")
         runner.db.delete_imap_account(account_id, user["id"])
+        with runner.db.connect() as connection:
+            for table in ("account_options", "personal_rules", "briefs"):
+                connection.execute(f"DELETE FROM {table} WHERE user_id=? AND account_id=?", (user["id"], account_id))
+
+
+from .workspace_api import create_router
+app.include_router(create_router(__import__(__name__, fromlist=["runner"])))

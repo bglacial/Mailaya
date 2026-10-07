@@ -7,103 +7,48 @@
     <meta name="mailaya-root" content="__MAILAYA_ROOT__">
     <meta name="theme-color" content="#663052">
     <title>Mailaya</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Anybody:wdth,wght@75..125,400..800&family=Geologica:wght@300..800&display=swap" rel="stylesheet">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23663052'/%3E%3Cpath d='M15 46V18h7l10 13 10-13h7v28h-7V29L32 41 22 29v17z' fill='%23f6b792'/%3E%3C/svg%3E">
-    <link rel="stylesheet" href="__MAILAYA_ROOT__/static/app.css">
-    <script src="__MAILAYA_ROOT__/static/app.js" defer></script>
+    <link rel="stylesheet" href="__MAILAYA_ROOT__/static/app.css?v=workspace-9">
+    <script src="__MAILAYA_ROOT__/static/app.js?v=workspace-9" defer></script>
+    <script src="__MAILAYA_ROOT__/static/workspace.js?v=workspace-9" defer></script>
+    <script src="__MAILAYA_ROOT__/static/ui.js?v=workspace-9" defer></script>
   </head>
   <body>
-    <a class="skip-link" href="#results">Aller aux résultats</a>
-    <header class="topbar">
-      <div class="identity">
-        <p class="eyebrow"><span class="brand-mark" aria-hidden="true">M</span><span>MAILAYA <span aria-hidden="true">/</span> TRI LOCAL</span></p>
-        <h1>Vos mails, <span>mis au clair.</span></h1>
-        <p>Catégorie, priorité, spam et action attendue. Vos messages sont analysés localement.</p>
-      </div>
-      <div class="promise" aria-label="Caractéristiques du traitement">
-        <span class="promise-mark" aria-hidden="true">✓</span>
-        <div>
-          <strong>Un tri lisible.</strong>
-          <span id="model-copy">Traitement local</span>
-        </div>
-      </div>
-    </header>
-
-    <main class="workspace">
-      <section class="results" id="results" aria-labelledby="results-heading">
-        <div class="results-toolbar">
-          <div>
-            <h2 id="results-heading">Messages analysés</h2>
-            <p id="results-summary">Lancez une démonstration pour découvrir le classement.</p>
-          </div>
-          <label class="filter-control">
-            <span>Afficher</span>
-            <select id="category-filter">
-              <option value="all">Toutes les catégories</option>
-            </select>
-          </label>
-        </div>
-
-        <div class="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">Expéditeur</th>
-                <th scope="col">Objet</th>
-                <th scope="col">Catégorie</th>
-                <th scope="col">Priorité</th>
-                <th scope="col">Spam</th>
-                <th scope="col">Action</th>
-                <th scope="col">Temps</th>
-              </tr>
-            </thead>
-            <tbody id="mail-rows"></tbody>
-          </table>
-          <div class="empty-state" id="empty-state">
-            <span class="empty-index">01</span>
-            <div>
-              <h3>Commencez par un échantillon</h3>
-              <p>Le mode démonstration reproduit le parcours complet sans accéder à votre messagerie.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <aside class="execution" aria-labelledby="execution-heading">
-        <section class="user-panel" aria-label="Votre espace">
-          <p id="user-copy">Mode public · messages de démonstration uniquement.</p>
-          <button type="button" class="text-button" id="logout" hidden>Se déconnecter</button>
-          <details id="login-panel">
-            <summary>Se connecter ou créer un compte</summary>
-            <p>Un compte vous permet de configurer vos boîtes IMAP et de conserver vos résultats dans votre espace.</p>
-            <form id="login-form" class="account-form">
-              <label><span>Identifiant</span><input id="login-username" autocomplete="username" minlength="3" maxlength="80" pattern="[A-Za-z0-9@._+\-]+" required></label>
-              <label><span>Mot de passe · 12 caractères minimum</span><input id="login-password" type="password" autocomplete="current-password" minlength="12" maxlength="256" required></label>
-              <div class="account-actions">
-                <button class="secondary-button" type="submit">Se connecter</button>
-                <button class="secondary-button" id="register" type="button">Créer mon compte</button>
-              </div>
-            </form>
-          </details>
-          <details id="password-panel" hidden>
-            <summary>Changer mon mot de passe</summary>
-            <form id="password-form" class="account-form">
-              <label><span>Mot de passe actuel</span><input id="current-password" type="password" autocomplete="current-password" required maxlength="256"></label>
-              <label><span>Nouveau mot de passe · 12 caractères minimum</span><input id="new-password" type="password" autocomplete="new-password" minlength="12" maxlength="256" required></label>
-              <button class="secondary-button" type="submit">Enregistrer le mot de passe</button>
-            </form>
-          </details>
-          <p id="session-note" role="status" aria-live="polite"></p>
-        </section>
-
-        <div class="execution-title">
-          <h2 id="execution-heading">Exécution</h2>
-          <span class="run-status" id="run-status" data-state="idle">Au repos</span>
-        </div>
-
-        <form id="run-form">
+    <a class="skip-link" href="#main-content">Aller au contenu</a>
+    <div class="app-shell">
+      <aside class="app-rail">
+        <a class="brand" href="#messages" aria-label="Mailaya, messages"><span class="brand-mark" aria-hidden="true">M</span><span>Mailaya<small>Le tri, à votre rythme.</small></span></a>
+        <nav class="main-nav" aria-label="Navigation principale">
+          <button type="button" data-page="messages" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m4 7 8 6 8-6"/></svg>Messages</button>
+          <button type="button" data-page="brief"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10v18H7zM10 7h4M10 11h4M10 15h2"/></svg>Brief quotidien</button>
+          <button type="button" data-page="analyses"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V4M4 20h16M9 16v-5M14 16V7M19 16v-8"/></svg>Analyses<span id="analysis-nav-dot" hidden class="status-dot" aria-label="Analyse active"></span></button>
+          <button type="button" data-page="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="16" cy="17" r="3"/></svg>Paramètres</button>
+        </nav>
+        <div class="rail-bottom"><span class="local-label"><span class="status-dot"></span>Lecture seule</span><p>Votre suivi reste dans Mailaya.<br>Vos mails restent dans votre boîte.</p><a href="__MAILAYA_ROOT__/guide">Guide &amp; installation ↗</a></div>
+      </aside>
+      <div class="app-body">
+        <header class="app-topbar"><span id="page-context">Votre espace de tri</span><details class="profile-menu"><summary id="session-badge">Démonstration</summary><div><button type="button" data-open-settings="account">Compte et connexion</button><a href="__MAILAYA_ROOT__/guide">Guide et installation</a><button type="button" id="logout" hidden>Se déconnecter</button></div></details></header>
+        <main id="main-content" tabindex="-1">
+          <section class="page" id="page-messages" data-page-panel="messages" aria-labelledby="results-heading">
+            <div class="page-heading"><div><p class="eyebrow">VOTRE BOÎTE DE TRI</p><h1 id="results-heading">Messages</h1><p id="results-summary">Retrouvez ce qui compte et ce qui reste à faire.</p></div><button type="button" class="primary-button" data-go="analyses">Analyser des messages <span aria-hidden="true">↗</span></button></div>
+            <section id="results" class="results" aria-label="Liste des messages">
+              <label class="filter-control" id="public-category"><span>Catégorie</span><select id="category-filter"><option value="all">Toutes les catégories</option></select></label>
+              __TRIAGE__
+              <div class="mail-workspace" id="mail-workspace"><div class="message-list"><div class="table-scroll"><table class="mail-table"><thead><tr><th scope="col">Message</th><th scope="col">Catégorie</th><th scope="col">Priorité</th><th scope="col">Suivi</th></tr></thead><tbody id="mail-rows"></tbody></table>
+                <div class="empty-state" id="empty-state"><span class="empty-symbol" aria-hidden="true">✉</span><h2 id="empty-heading">Vos messages commencent ici</h2><p id="empty-copy">Analysez un échantillon pour découvrir le tri, puis connectez votre boîte mail.</p><button type="button" class="primary-button" data-go="analyses">Préparer une analyse</button></div>
+              </div></div>
+              <aside id="message-reader" class="message-reader" aria-label="Lecture du message" hidden><div class="reader-toolbar"><span>Aperçu du message</span><button type="button" id="close-reader" class="text-button">Fermer <span aria-hidden="true">×</span></button></div><div id="reader-content"></div></aside></div>
+            </section>
+          </section>
+          <section class="page reading-page" id="page-brief" data-page-panel="brief" hidden aria-labelledby="brief-page-heading">
+            <div class="page-heading"><div><p class="eyebrow">LE POINT DU JOUR</p><h1 id="brief-page-heading">Brief quotidien</h1><p>Les demandes en attente, avec leurs messages sources.</p></div></div>
+            <div class="context-line"><label><span>Boîte concernée</span><select id="brief-account"><option value="0">Démonstration personnelle</option></select></label><label><span>Brief conservé</span><select id="brief-history"><option value="">Choisir un jour</option></select></label></div>
+            <div id="brief-setup" class="empty-state"><span class="empty-symbol" aria-hidden="true">☷</span><h2>Un point quotidien, quand vous en avez besoin</h2><p>Activez le brief pour cette boîte. Il fonctionne sans LLM ; vous pourrez ajouter un résumé génératif ensuite.</p><button type="button" id="configure-brief" class="primary-button">Configurer ce brief</button></div>
+            <div id="brief-slot"></div>
+          </section>
+          <section class="page" id="page-analyses" data-page-panel="analyses" hidden aria-labelledby="analyses-heading">
+            <div class="page-heading"><div><p class="eyebrow">IMPORTER ET CLASSER</p><h1 id="analyses-heading">Analyses</h1><p>Un lot à la fois. Les messages déjà importés restent accessibles.</p></div><button type="button" class="secondary-button" id="new-run">Nouvelle analyse</button></div>
+            <div class="analysis-layout"><section class="analysis-form"><h2 id="execution-heading">Préparer une analyse</h2>        <form id="run-form">
           <div class="field-grid">
             <label>
               <span>Source</span>
@@ -130,8 +75,8 @@
           <label class="date-field">
             <span>Modèle d’analyse</span>
             <select id="model" name="model">
-              <option value="julia">Julia-1 — SupersonicLabs</option>
-              <option value="laya">LAYA multilingual — Convai Innovations</option>
+              <option value="julia">Julia-1</option>
+              <option value="laya">LAYA multilingual</option>
             </select>
           </label>
           <p class="model-hint" id="model-hint">Le modèle choisi analyse localement les messages, y compris ceux de démonstration.</p>
@@ -144,38 +89,10 @@
             <span id="run-button-label">Lancer l’analyse</span>
             <span aria-hidden="true">→</span>
           </button>
+          <label class="check-field" id="incremental-field" hidden><input type="checkbox" id="incremental" checked><span>Analyser seulement les nouveaux messages pour ce modèle</span></label>
         </form>
 
-        <div class="run-actions">
-          <button class="text-button" id="new-run" type="button">Nouvelle exécution</button>
-          <button class="text-button" id="clear-results" type="button">Effacer les résultats</button>
-        </div>
-
-        <details class="user-panel" id="imap-panel" hidden>
-          <summary>Mes comptes IMAP</summary>
-          <p>Lecture seule. Utilisez un mot de passe d’application si votre fournisseur le demande.</p>
-          <div id="imap-accounts"></div>
-          <button id="add-account" class="secondary-button" type="button">Ajouter un compte IMAP</button>
-          <form id="imap-form" class="account-form" hidden>
-            <h3 id="imap-form-title">Ajouter un compte</h3>
-            <label><span>Nom du compte</span><input id="imap-name" maxlength="80" required placeholder="Messagerie personnelle"></label>
-            <label><span>Serveur IMAP</span><input id="imap-host" maxlength="253" required placeholder="imap.exemple.fr" autocapitalize="none" spellcheck="false"></label>
-            <div class="field-grid">
-              <label><span>Sécurité</span><select id="imap-security"><option value="ssl">TLS direct</option><option value="starttls">STARTTLS</option></select></label>
-              <label><span>Port</span><input id="imap-port" type="number" min="1" max="65535" value="993" required></label>
-            </div>
-            <label><span>Identifiant IMAP</span><input id="imap-username" maxlength="320" required autocomplete="off" autocapitalize="none" spellcheck="false"></label>
-            <label><span id="imap-password-label">Mot de passe IMAP</span><input id="imap-password" type="password" maxlength="1024" autocomplete="new-password"></label>
-            <label><span>Dossier</span><input id="imap-mailbox" value="INBOX" maxlength="255" required></label>
-            <div class="account-actions">
-              <button class="secondary-button" type="submit">Enregistrer le compte</button>
-              <button id="cancel-account" class="text-button" type="button">Annuler</button>
-            </div>
-          </form>
-          <p id="imap-note" role="status" aria-live="polite"></p>
-        </details>
-
-        <section class="progress-section" aria-labelledby="progress-heading">
+</section><section class="analysis-report"><div class="section-heading"><h2>Dernier traitement</h2><span class="run-status" id="run-status" data-state="idle">Au repos</span></div>        <section class="progress-section" aria-labelledby="progress-heading">
           <div class="section-label">
             <h3 id="progress-heading">Progression</h3>
             <span id="progress-percent">0 %</span>
@@ -206,7 +123,68 @@
         </section>
 
         <p class="system-note" id="system-note" role="status" aria-live="polite">Prêt pour une démonstration locale.</p>
-      </aside>
-    </main>
+<details class="technical-note"><summary>Modèle et traitement</summary><p id="model-copy">Traitement local</p></details></section></div>
+            <section id="history-slot" class="history-section"></section><div id="comparison-slot"></div>
+            <details class="data-management"><summary>Gestion des résultats</summary><p>Effacer retire les analyses de Mailaya, sans modifier votre messagerie. Les briefs et les réglages sont conservés.</p><button class="danger-button" id="clear-results" type="button">Effacer mes résultats</button><div id="clear-confirm" hidden><p>Cette suppression des résultats locaux est définitive.</p><button type="button" id="confirm-clear" class="danger-button">Confirmer la suppression</button><button type="button" id="cancel-clear" class="secondary-button">Conserver les résultats</button></div></details>
+          </section>
+          <section class="page settings-page" id="page-settings" data-page-panel="settings" hidden aria-labelledby="settings-heading"><div class="page-heading"><div><p class="eyebrow">VOTRE APPLICATION</p><h1 id="settings-heading">Paramètres</h1><p>Connectez vos boîtes, puis choisissez les fonctions utiles.</p></div></div>
+            <nav class="settings-nav" aria-label="Sections des paramètres"><button type="button" data-settings="mailboxes" aria-current="page">Boîtes mail</button><button type="button" data-settings="features">Fonctions par boîte</button><button type="button" data-settings="connections">Connexions IA</button><button type="button" data-settings="rules">Règles de tri</button><button type="button" data-settings="account">Mon compte</button></nav>
+            <div id="settings-login-hint" class="inline-notice" hidden>Connectez-vous pour accéder à vos boîtes et réglages personnels. <button type="button" class="text-button" data-open-settings="account">Se connecter</button></div>
+            <div id="settings-mailboxes" data-settings-panel="mailboxes">        <section class="settings-section" id="imap-panel" hidden>
+          <div class="section-heading"><div><h2>Boîtes mail</h2><p>Connectez une boîte en lecture seule.</p></div></div>
+          <p>Lecture seule. Utilisez un mot de passe d’application si votre fournisseur le demande.</p>
+          <div id="imap-accounts"></div>
+          <button id="add-account" class="primary-button" type="button">Ajouter une boîte mail</button>
+          <form id="imap-form" class="account-form" hidden>
+            <h3 id="imap-form-title">Ajouter un compte</h3>
+            <label><span>Nom du compte</span><input id="imap-name" maxlength="80" required placeholder="Messagerie personnelle"></label>
+            <label><span>Serveur IMAP</span><input id="imap-host" maxlength="253" required placeholder="imap.exemple.fr" autocapitalize="none" spellcheck="false"></label>
+            <div class="field-grid">
+              <label><span>Sécurité</span><select id="imap-security"><option value="ssl">TLS direct</option><option value="starttls">STARTTLS</option></select></label>
+              <label><span>Port</span><input id="imap-port" type="number" min="1" max="65535" value="993" required></label>
+            </div>
+            <label><span>Identifiant IMAP</span><input id="imap-username" maxlength="320" required autocomplete="off" autocapitalize="none" spellcheck="false"></label>
+            <label><span id="imap-password-label">Mot de passe IMAP</span><input id="imap-password" type="password" maxlength="1024" autocomplete="new-password"></label>
+            <label><span>Dossier</span><input id="imap-mailbox" value="INBOX" maxlength="255" required></label>
+            <div class="account-actions">
+              <button class="secondary-button" type="submit">Enregistrer le compte</button>
+              <button id="cancel-account" class="text-button" type="button">Annuler</button>
+            </div>
+          </form>
+          <p id="imap-note" role="status" aria-live="polite"></p>
+        </section>
+</div>
+            __WORKSPACE_SETTINGS__
+            <div id="settings-account" data-settings-panel="account" hidden>        <section class="user-panel" aria-label="Votre espace">
+          <p id="user-copy">Mode public · messages de démonstration uniquement.</p>
+          <details id="login-panel" open>
+            <summary>Se connecter ou créer un compte</summary>
+            <p>Un compte vous permet de configurer vos boîtes IMAP et de conserver vos résultats dans votre espace.</p>
+            <form id="login-form" class="account-form">
+              <label><span>Identifiant</span><input id="login-username" autocomplete="username" minlength="3" maxlength="80" pattern="[A-Za-z0-9@._+\-]+" required></label>
+              <label><span>Mot de passe · 12 caractères minimum</span><input id="login-password" type="password" autocomplete="current-password" minlength="12" maxlength="256" required></label>
+              <div class="account-actions">
+                <button class="secondary-button" type="submit">Se connecter</button>
+                <button class="secondary-button" id="register" type="button">Créer mon compte</button>
+              </div>
+            </form>
+          </details>
+          <details id="password-panel" hidden>
+            <summary>Changer mon mot de passe</summary>
+            <form id="password-form" class="account-form">
+              <label><span>Mot de passe actuel</span><input id="current-password" type="password" autocomplete="current-password" required maxlength="256"></label>
+              <label><span>Nouveau mot de passe · 12 caractères minimum</span><input id="new-password" type="password" autocomplete="new-password" minlength="12" maxlength="256" required></label>
+              <button class="secondary-button" type="submit">Enregistrer le mot de passe</button>
+            </form>
+          </details>
+          <p id="session-note" role="status" aria-live="polite"></p>
+        </section>
+
+</div>
+          </section>
+        </main>
+        <div id="workspace-feedback" class="workspace-status" hidden><p id="workspace-note" role="status" aria-live="polite"></p><button type="button" id="dismiss-feedback" aria-label="Fermer ce message">×</button></div>
+      </div>
+    </div>
   </body>
 </html>
