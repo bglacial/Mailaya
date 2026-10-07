@@ -1,6 +1,6 @@
 [project]
 name = "mailaya"
-version = "0.3.0"
+version = "0.3.1"
 description = "Triage local de messages IMAP avec Julia ou LAYA, isolés par utilisateur"
 readme = "README.md"
 requires-python = ">=3.11"

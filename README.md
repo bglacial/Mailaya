@@ -19,7 +19,9 @@ uv run --extra laya --extra julia uvicorn app.main:app --reload
 
 Ouvrez [http://127.0.0.1:8000](http://127.0.0.1:8000). La documentation de l’API est disponible sous `/api/docs`.
 
-Le premier usage de chaque modèle télécharge ses poids depuis Hugging Face, sauf s’ils sont déjà en cache. Le modèle choisi se charge à la demande puis reste en mémoire jusqu’au choix d’un autre modèle. Les analyses sont sérialisées entre les utilisateurs et le checkpoint précédent est déchargé lors du changement, afin de contenir la mémoire sur les petites machines. Aucun contenu de mail n’est envoyé à un service d’IA distant.
+Le premier usage de chaque modèle télécharge ses poids depuis Hugging Face, sauf s’ils sont déjà en cache. Le modèle choisi se charge à la demande dans un processus d’inférence séparé. Ce processus est réutilisé pour les messages de l’analyse, puis arrêté à la fin, en pause ou en cas d’erreur : sa mémoire est rendue au système. Les poids restent en cache sur disque. Chaque nouvelle analyse ou reprise recharge le modèle ; ce chargement peut être lent sur une petite machine.
+
+Les analyses sont sérialisées entre les utilisateurs : un seul processus d’inférence fonctionne à la fois. Il reçoit uniquement les champs textuels nécessaires au modèle, sans les identifiants de compte ni les secrets IMAP. Une pause interrompt le message en cours sans le marquer en échec ; il sera traité à la reprise. Si le processus s’arrête brutalement ou ne répond plus pendant 15 minutes pour un message (chargement compris), l’analyse s’arrête avec une erreur explicite et conserve les résultats déjà calculés. L’arrêt normal du service met les analyses actives en pause et termine l’inférence. Aucun contenu de mail n’est envoyé à un service d’IA distant.
 
 Vous pouvez installer un seul runtime avec `--extra laya` ou `--extra julia`. Une analyse sélectionnant un runtime absent s’arrête avec une instruction d’installation. La source **Démonstration** utilise des mails fictifs et le vrai modèle sélectionné ; elle ne remplace pas son inference par des règles. `LAYA_BACKEND=demo` fournit un moteur déterministe aux tests et aux appels API sans sélection explicite de modèle.
 
@@ -54,7 +56,7 @@ uv run --extra dev --extra laya --extra julia pytest
 node --check app/static/app.js
 ```
 
-La suite vérifie les sessions, le cloisonnement entre utilisateurs et mode public, le chiffrement, la migration des anciennes données, la gestion IMAP, la lecture sans modification des messages et le choix des modèles. Les connexions IMAP et les modèles sont simulés dans ces tests pour ne pas dépendre d’une messagerie ou d’un téléchargement.
+La suite vérifie les sessions, le cloisonnement entre utilisateurs et mode public, le chiffrement, la migration des anciennes données, la gestion IMAP, la lecture sans modification des messages et le choix des modèles. Elle lance aussi de vrais processus séparés avec un moteur simulé pour vérifier leur arrêt, les crashs, la pause/reprise et l’arrêt du service. Les connexions IMAP et les modèles sont simulés dans ces tests pour ne pas dépendre d’une messagerie ou d’un téléchargement.
 
 Une vérification avec les vrais poids Julia sur trois messages fictifs est également disponible :
 
@@ -69,6 +71,7 @@ app/
   auth.py        Utilisateurs, sessions et chiffrement des mots de passe IMAP
   imap.py        Connexion TLS et normalisation des messages MIME
   classifier.py Adaptateurs LAYA/PyTorch, Julia/PyTorch et moteur de test
+  inference.py  Processus d’inférence isolé et arrêt libérant sa mémoire
   db.py          Persistance SQLite et propriétaires des données
   runner.py      Exécutions, choix du modèle, pause et métriques
   main.py        API FastAPI

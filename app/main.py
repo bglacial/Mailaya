@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from contextlib import asynccontextmanager
 from datetime import date
 import html
 from pathlib import Path
@@ -14,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, SecretStr, field_validator
 
 from .auth import SESSION_COOKIE, SESSION_SECONDS, SecretStore, UserAuth
-from .classifier import JuliaClassifier, LayaClassifier, build_classifier
+from .inference import build_process_classifier
 from .config import JULIA_MODEL, JULIA_REVISION, LAYA_MODEL, get_settings
 from .db import Database
 from .imap import ImapMailClient
@@ -72,11 +73,21 @@ def provider_for(run: dict):
     return ImapMailClient(account, secrets_store.decrypt(account["password_encrypted"]))
 
 
-classifier = build_classifier(settings)
+classifier = build_process_classifier(settings)
 runner = RunManager(database, classifier, {}, provider_factory=provider_for,
-                    classifiers={"laya-pytorch": LayaClassifier(replace(settings, laya_model=LAYA_MODEL)),
-                                 "julia-pytorch": JuliaClassifier(replace(settings, julia_model=JULIA_MODEL, julia_revision=JULIA_REVISION))})
-app = FastAPI(title="Mailaya", version="0.3.0", docs_url="/api/docs", redoc_url=None)
+                    classifiers={"laya-pytorch": build_process_classifier(replace(settings, laya_model=LAYA_MODEL), "laya"),
+                                 "julia-pytorch": build_process_classifier(replace(settings, julia_model=JULIA_MODEL, julia_revision=JULIA_REVISION), "julia")})
+
+
+@asynccontextmanager
+async def lifespan(app):
+    try:
+        yield
+    finally:
+        runner.shutdown()
+
+
+app = FastAPI(title="Mailaya", version="0.3.1", docs_url="/api/docs", redoc_url=None, lifespan=lifespan)
 static_dir = Path(__file__).resolve().parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 

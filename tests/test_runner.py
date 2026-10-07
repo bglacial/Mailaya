@@ -52,7 +52,7 @@ def test_demo_run_can_process_all_500_messages(tmp_path, monkeypatch):
     assert len(payload["emails"]) == 500
 
 
-def test_switching_models_releases_the_previous_checkpoint(tmp_path):
+def test_each_batch_releases_its_checkpoint_before_completion(tmp_path):
     class Model(DemoClassifier):
         def __init__(self, name):
             self.name = name
@@ -67,7 +67,7 @@ def test_switching_models_releases_the_previous_checkpoint(tmp_path):
     manager = RunManager(Database(tmp_path / "models.sqlite3"), first, {}, classifiers={"second": second})
     manager.start("demo", "2026-10-01", 1)
     wait_for_terminal_state(manager)
-    assert first.resident
+    assert not first.resident
     manager.start("demo", "2026-10-01", 1, model_backend="second")
     wait_for_terminal_state(manager)
-    assert second.resident and not first.resident
+    assert not second.resident and not first.resident

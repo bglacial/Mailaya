@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-import gc
 import statistics
 import threading
+import time
 from datetime import datetime
 from typing import Any
 
 from .classifier import Classifier, ClassifierLoadError
 from .db import Database, utc_now
 from .demo_data import demo_messages
+from .inference import InferenceCancelled
 
 
 ACTIVE_STATUSES = {"queued", "fetching", "running"}
@@ -25,10 +26,14 @@ class RunManager:
         self._lock = threading.RLock()
         self._classifier_lock = threading.Lock()
         self._threads: dict[int, threading.Thread] = {}
+        self._active_inference: tuple[int, Classifier] | None = None
+        self._stopping = False
 
     def start(self, source: str, since: str, limit: int, user_id: int | None = None,
               imap_account_id: int | None = None, model_backend: str | None = None) -> int:
         with self._lock:
+            if self._stopping:
+                raise RuntimeError("Le service est en cours d’arrêt. Réessayez après son redémarrage.")
             if self.db.active_run(user_id):
                 raise RuntimeError("Une exécution est déjà en cours pour votre compte.")
             selected = self.classifiers.get(model_backend or self.classifier.name)
@@ -40,6 +45,8 @@ class RunManager:
 
     def _launch(self, run_id: int) -> None:
         with self._lock:
+            if self._stopping:
+                return
             current = self._threads.get(run_id)
             if current and current.is_alive():
                 return
@@ -49,14 +56,15 @@ class RunManager:
 
     def _execute(self, run_id: int) -> None:
         try:
-            run = self.db.get_run(run_id)
-            if not run:
-                return
-            classifier = self.classifiers.get(run["model_backend"])
-            if classifier is None:
-                raise ClassifierLoadError("Le modèle de cette exécution n’est plus disponible. Lancez une nouvelle analyse.")
-            if not run["started_at"]:
-                self.db.set_run(run_id, status="fetching", started_at=utc_now(), error=None)
+            with self._lock:
+                run = self.db.get_run(run_id)
+                if self._stopping or not run or run["status"] == "paused":
+                    return
+                classifier = self.classifiers.get(run["model_backend"])
+                if classifier is None:
+                    raise ClassifierLoadError("Le modèle de cette exécution n’est plus disponible. Lancez une nouvelle analyse.")
+                if not run["started_at"]:
+                    self.db.set_run(run_id, status="fetching", started_at=utc_now(), error=None)
             if run["total"] == 0:
                 if run["source"] == "demo":
                     messages = demo_messages(run["since_date"], run["requested_limit"])
@@ -69,27 +77,36 @@ class RunManager:
             with self._classifier_lock:
                 with self._lock:
                     current = self.db.get_run(run_id)
-                    if not current or current["status"] == "paused":
+                    if self._stopping or not current or current["status"] == "paused":
                         return
                     self.db.set_run(run_id, status="running")
-                # Keep one checkpoint resident; never swap between individual mails.
-                for other in self.classifiers.values():
-                    if other is not classifier:
-                        other.unload()
-                gc.collect()
-                while True:
-                    run = self.db.get_run(run_id)
-                    if not run or run["status"] == "paused":
-                        return
-                    email = self.db.next_pending_email(run_id)
-                    if not email:
-                        break
+                    begin = getattr(classifier, "begin_run", None)
+                    if begin:
+                        begin()
+                    self._active_inference = (run_id, classifier)
+                try:
+                    while True:
+                        run = self.db.get_run(run_id)
+                        if self._stopping or not run or run["status"] == "paused":
+                            return
+                        email = self.db.next_pending_email(run_id)
+                        if not email:
+                            break
+                        try:
+                            self.db.complete_email(email["id"], classifier.classify(email))
+                        except InferenceCancelled:
+                            return
+                        except ClassifierLoadError:
+                            raise
+                        except Exception as exc:
+                            self.db.fail_email(email["id"], str(exc))
+                finally:
+                    # Reap the process before marking completion or allowing another batch.
                     try:
-                        self.db.complete_email(email["id"], classifier.classify(email))
-                    except ClassifierLoadError:
-                        raise
-                    except Exception as exc:
-                        self.db.fail_email(email["id"], str(exc))
+                        classifier.unload()
+                    finally:
+                        with self._lock:
+                            self._active_inference = None
                 with self._lock:
                     final = self.db.get_run(run_id)
                     if final and final["status"] != "paused":
@@ -102,7 +119,7 @@ class RunManager:
                 self._threads.pop(run_id, None)
                 current = self.db.get_run(run_id)
                 # Resume can arrive after a worker decided to pause, but before it exits.
-                if current and current["status"] == "running":
+                if not self._stopping and current and current["status"] == "running":
                     self._launch(run_id)
 
     def pause(self, run_id: int) -> None:
@@ -111,9 +128,15 @@ class RunManager:
             if not run or run["status"] not in ACTIVE_STATUSES:
                 raise RuntimeError("Cette exécution ne peut pas être mise en pause.")
             self.db.set_run(run_id, status="paused")
+            if self._active_inference and self._active_inference[0] == run_id:
+                cancel = getattr(self._active_inference[1], "cancel", None)
+                if cancel:
+                    cancel()
 
     def resume(self, run_id: int) -> None:
         with self._lock:
+            if self._stopping:
+                raise RuntimeError("Le service est en cours d’arrêt. Réessayez après son redémarrage.")
             run = self.db.get_run(run_id)
             if not run or run["status"] != "paused":
                 raise RuntimeError("Cette exécution n'est pas en pause.")
@@ -131,6 +154,22 @@ class RunManager:
                 if thread.is_alive() and run and run["user_id"] == user_id:
                     raise RuntimeError("La mise en pause est en cours. Réessayez dans quelques secondes.")
             self.db.clear(user_id)
+
+    def shutdown(self) -> None:
+        with self._lock:
+            self._stopping = True
+            threads = list(self._threads.values())
+            for run_id in self._threads:
+                run = self.db.get_run(run_id)
+                if run and run["status"] in ACTIVE_STATUSES:
+                    self.db.set_run(run_id, status="paused")
+            if self._active_inference:
+                cancel = getattr(self._active_inference[1], "cancel", None)
+                if cancel:
+                    cancel()
+        deadline = time.monotonic() + 6
+        for thread in threads:
+            thread.join(timeout=max(0, deadline - time.monotonic()))
 
     def dashboard(self, user_id: int | None = None) -> dict[str, Any]:
         run = self.db.latest_run(user_id)

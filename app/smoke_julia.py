@@ -7,14 +7,15 @@ import tempfile
 import time
 from pathlib import Path
 
-from .classifier import CATEGORIES, JuliaClassifier
+from .classifier import CATEGORIES
 from .config import get_settings
 from .db import Database
+from .inference import build_process_classifier
 from .runner import RunManager
 
 
 def main() -> None:
-    classifier = JuliaClassifier(get_settings())
+    classifier = build_process_classifier(get_settings(), "julia")
     with tempfile.TemporaryDirectory(prefix="mailaya-julia-") as directory:
         manager = RunManager(Database(Path(directory) / "smoke.sqlite3"), classifier, {})
         manager.start("demo", "2026-09-01", 3)
