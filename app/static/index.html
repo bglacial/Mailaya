@@ -8,10 +8,10 @@
     <meta name="theme-color" content="#663052">
     <title>Mailaya</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23663052'/%3E%3Cpath d='M15 46V18h7l10 13 10-13h7v28h-7V29L32 41 22 29v17z' fill='%23f6b792'/%3E%3C/svg%3E">
-    <link rel="stylesheet" href="__MAILAYA_ROOT__/static/app.css?v=workspace-10">
-    <script src="__MAILAYA_ROOT__/static/app.js?v=workspace-10" defer></script>
-    <script src="__MAILAYA_ROOT__/static/workspace.js?v=workspace-10" defer></script>
-    <script src="__MAILAYA_ROOT__/static/ui.js?v=workspace-10" defer></script>
+    <link rel="stylesheet" href="__MAILAYA_ROOT__/static/app.css?v=workspace-11">
+    <script src="__MAILAYA_ROOT__/static/app.js?v=workspace-11" defer></script>
+    <script src="__MAILAYA_ROOT__/static/workspace.js?v=workspace-11" defer></script>
+    <script src="__MAILAYA_ROOT__/static/ui.js?v=workspace-11" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main-content">Aller au contenu</a>
@@ -33,7 +33,7 @@
             <section id="results" class="results" aria-label="Liste des messages">
               <label class="filter-control" id="public-category"><span>Catégorie</span><select id="category-filter"><option value="all">Toutes les catégories</option></select></label>
               __TRIAGE__
-              <div class="mail-workspace" id="mail-workspace"><div class="message-list"><div class="table-scroll"><table class="mail-table"><thead><tr><th scope="col">Message</th><th scope="col">Catégorie</th><th scope="col">Priorité</th><th scope="col">Suivi</th></tr></thead><tbody id="mail-rows"></tbody></table>
+              <div class="mail-workspace" id="mail-workspace"><div class="message-list"><div class="table-scroll"><table class="mail-table"><thead><tr><th scope="col">Message</th><th scope="col">Catégorie</th><th scope="col">Priorité et signaux</th><th scope="col">Suivi</th></tr></thead><tbody id="mail-rows"></tbody></table>
                 <div class="empty-state" id="empty-state"><span class="empty-symbol" aria-hidden="true">✉</span><h2 id="empty-heading">Vos messages commencent ici</h2><p id="empty-copy">Analysez un échantillon pour découvrir le tri, puis connectez votre boîte mail.</p><button type="button" class="primary-button" data-go="analyses">Préparer une analyse</button></div>
               </div></div>
               <aside id="message-reader" class="message-reader" aria-label="Lecture du message" hidden><div class="reader-toolbar"><span>Aperçu du message</span><button type="button" id="close-reader" class="text-button">Fermer <span aria-hidden="true">×</span></button></div><div id="reader-content"></div></aside></div>

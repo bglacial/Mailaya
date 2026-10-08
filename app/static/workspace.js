@@ -156,6 +156,7 @@
       const tags = text("p", "", "reader-classification"), level = priorityLabel(email.effective_priority || 0);
       const priorityTag = text("span", "Priorité " + level.label.toLocaleLowerCase("fr-FR"), "priority-label"); priorityTag.dataset.level = level.level;
       tags.append(text("span", email.effective_category, "tag"), priorityTag);
+      tags.append(...signalNodes(email));
       if (email.needs_review) tags.append(text("span", "À vérifier", "review-label"));
       if (email.decision_source !== "model") tags.append(text("span", email.decision_source === "manual" ? "Corrigé" : "Règle", "review-label"));
       content.append(tags);
@@ -206,10 +207,12 @@
       if(email.needs_review) category.append(text("small","À vérifier"));
       if(email.decision_source!=="model") category.append(text("small",email.decision_source==="manual"?"Corrigé":"Règle"));
       const priority=priorityLabel(email.effective_priority||0), priorityNode=text("span",priority.label,"priority-label"); priorityNode.dataset.level=priority.level; priorityNode.title=`${email.effective_priority||0}/100`;
+      const signals=text("div","","signal-cell"); signals.append(priorityNode); if(email.status==="complete") signals.append(...signalNodes(email));
+      row.dataset.spam=String(email.status==="complete"&&(email.spam_score||0)>=SPAM_THRESHOLD);
       const status=email.task==="todo"?text("span","","task-label"):text("span",({done:"Traité",snoozed:"Reporté"})[email.task],"task-label"); status.dataset.task=email.task;
       if(email.task==="todo") status.append(text("span","À faire","sr-only"));
       row.dataset.task=email.task; row.addEventListener("click",event=>{ if(!event.target.closest("button,a")) openReader(email); });
-      row.append(makeCell(message,"message-cell"),makeCell(category,"category-cell"),makeCell(priorityNode),makeCell(status)); tbody.append(row);
+      row.append(makeCell(message,"message-cell"),makeCell(category,"category-cell"),makeCell(signals),makeCell(status)); tbody.append(row);
     }
     if(w.selectedEmail) renderReader(w.emails.find(e=>e.id===w.selectedEmail)||w.readerEmail);
     return true;
