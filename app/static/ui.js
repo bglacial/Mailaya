@@ -24,7 +24,6 @@
       else button.removeAttribute("aria-current");
       button.disabled = !state.user && button.dataset.settings !== "account";
     }
-    $("page-context").textContent = names[page];
     const hash = "#" + page + (page === "settings" ? "/" + settings : "");
     if (location.hash !== hash) history.replaceState(null, "", hash);
     document.querySelector(".profile-menu").open = false;
@@ -127,7 +126,22 @@
   $("cancel-connection").addEventListener("click", () => { $("connection-form").hidden = true; });
   $("cancel-clear").addEventListener("click", () => { $("clear-confirm").hidden = true; });
   $("dismiss-feedback").addEventListener("click", () => { $("workspace-note").textContent = ""; const heading = $("page-" + page).querySelector("h1"); heading.tabIndex=-1; heading.focus({preventScroll:true}); });
-  new MutationObserver(() => { $("workspace-feedback").hidden = !$("workspace-note").textContent; }).observe($("workspace-note"), {childList:true,characterData:true,subtree:true});
+  let feedbackTimer = null;
+  new MutationObserver(() => {
+    const note = $("workspace-note"), error = note.dataset.kind === "error";
+    $("workspace-feedback").hidden = !note.textContent; $("workspace-feedback").dataset.kind = error ? "error" : "";
+    clearTimeout(feedbackTimer);
+    // Confirmations fade on their own; errors stay until dismissed.
+    if (note.textContent && !error) feedbackTimer = setTimeout(() => { note.textContent = ""; }, 5000);
+  }).observe($("workspace-note"), {childList:true,characterData:true,subtree:true,attributes:true});
+  // Menus built on <details> close like native popovers.
+  const menus = ".advanced-filters,.list-menu,.profile-menu";
+  document.addEventListener("click", event => { for (const menu of document.querySelectorAll(menus)) if (menu.open && !menu.contains(event.target)) menu.open = false; });
+  document.addEventListener("keydown", event => {
+    if (event.key !== "Escape") return;
+    const menu = event.target.closest?.(menus) || [...document.querySelectorAll(menus)].find(m => m.open);
+    if (menu?.open) { menu.open = false; menu.querySelector("summary").focus(); }
+  });
   window.addEventListener("hashchange", () => { const [next, section] = location.hash.slice(1).split("/"); if (Object.hasOwn(names, next)) show(next, section); });
   const [initial, section] = location.hash.slice(1).split("/"); show(initial || "messages", section, false);
   if (state.user) session(state.user);
