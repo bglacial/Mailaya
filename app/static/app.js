@@ -62,6 +62,21 @@ function scoreNode(value) {
   return node;
 }
 
+// Same thresholds as the "À traiter" view and the brief (app/workspace.py, app/brief.py).
+const ACTION_THRESHOLD = 50, SPAM_THRESHOLD = 70;
+function signalNodes(email) {
+  const nodes = [];
+  if ((email.action_score || 0) >= ACTION_THRESHOLD) {
+    const node = text("span", "Action attendue", "signal"); node.dataset.signal = "action";
+    node.title = `Action attendue : ${formatNumber(email.action_score)} %`; nodes.push(node);
+  }
+  if ((email.spam_score || 0) >= SPAM_THRESHOLD) {
+    const node = text("span", "Spam probable", "signal"); node.dataset.signal = "spam";
+    node.title = `Spam : ${formatNumber(email.spam_score)} %`; nodes.push(node);
+  }
+  return nodes;
+}
+
 function makeCell(content, className = "") {
   const cell = document.createElement("td");
   cell.className = className;
@@ -113,7 +128,8 @@ function renderRows(emails) {
       const category=text("button",email.category,"category-button"); category.type="button"; category.setAttribute("aria-expanded",String(state.expanded.has(email.id))); category.setAttribute("aria-controls",`matrix-${email.id}`); category.title="Comprendre le classement";
       category.addEventListener("click",()=>{state.expanded.has(email.id)?state.expanded.delete(email.id):state.expanded.add(email.id);renderRows(state.dashboard.emails);});
       const priority=priorityLabel(email.priority_score), value=text("span",priority.label,"priority-label"); value.dataset.level=priority.level; value.title=`${email.priority_score}/100`;
-      row.append(makeCell(category),makeCell(value),makeCell("–"));
+      const signals=text("div","","signal-cell"); signals.append(value,...signalNodes(email)); row.dataset.spam=String((email.spam_score||0)>=SPAM_THRESHOLD);
+      row.append(makeCell(category),makeCell(signals),makeCell("–"));
     } else row.append(makeCell(email.status==="failed"?"Échec":"En attente"),makeCell("–"),makeCell("–"));
     tbody.append(row);
     if(email.status==="complete") tbody.append(renderMatrix(email));

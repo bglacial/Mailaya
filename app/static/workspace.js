@@ -18,9 +18,13 @@
   }
   async function action(button, note, callback) {
     if (button) { button.disabled = true; button.dataset.busy = "true"; button.setAttribute("aria-busy", "true"); }
-    $(note).textContent = "En cours…";
-    try { await callback(); } catch (error) { $(note).textContent = error.message; }
+    const list = note === "workspace-note";
+    delete $(note).dataset.kind;
+    $(note).textContent = list ? "" : "En cours…";
+    if (list) $("mail-workspace").setAttribute("aria-busy", "true");
+    try { await callback(); } catch (error) { $(note).textContent = error.message; $(note).dataset.kind = "error"; }
     finally {
+      if (list) $("mail-workspace").removeAttribute("aria-busy");
       if (button) { button.disabled = false; delete button.dataset.busy; button.removeAttribute("aria-busy"); }
       window.MailayaUI?.update(w.data);
       if (button?.id === "compare-models" && w.data) renderSettings();
@@ -65,7 +69,7 @@
     if (seq !== w.sequence) return;
     w.emails = result.emails; w.total = result.total; w.loaded = true;
     w.forceRender = forceRender; renderRows([]); w.forceRender = false;
-    $("page-count").textContent = result.total ? `${w.offset + 1}–${Math.min(w.offset + 50, result.total)} sur ${result.total}` : "Aucun message correspondant";
+    $("page-count").textContent = result.total ? `${w.offset + 1}–${Math.min(w.offset + 50, result.total)} sur ${result.total}` : "";
     $("previous-page").disabled = w.offset === 0;
     $("next-page").disabled = w.offset + 50 >= result.total;
     $("results-summary").textContent = `${result.total} message${result.total > 1 ? "s" : ""}${w.runId ? ` · analyse #${w.runId}` : w.demoOnly ? " · démonstration personnelle" : " · historique personnel"}`;
@@ -74,49 +78,89 @@
   function field(label, input) {
     const node = text("label", ""); node.append(text("span", label), input); return node;
   }
+  function localInput(value) {
+    const date = new Date(value); return new Date(date - date.getTimezoneOffset() * 60000).toISOString().slice(0,16);
+  }
   function editor(email) {
-    const form = text("form", "", "mail-editor");
+    const section = text("section", "", "mail-editor"); section.setAttribute("aria-labelledby", "reader-task-heading");
+    const heading = text("h3", "Mon suivi"); heading.id = "reader-task-heading";
+    const note = text("p", "Le suivi reste dans Mailaya. Aucun mail n’est modifié.", "editor-note"); note.setAttribute("role", "status");
+    async function save(changes, message, control) {
+      if (control) control.disabled = true;
+      try {
+        await request(`/messages/${email.id}`, json("PUT", { category: email.correction.category || null, priority: email.correction.priority ?? null,
+          task: email.task, snoozed_until: email.task === "snoozed" ? email.snoozed_until : null, ...changes }));
+        for (const form of section.querySelectorAll("form")) form.dataset.dirty = "false";
+        w.readerEmail = await request(`/messages/${email.id}`);
+        await search(); renderReader(w.readerEmail, true);
+        $("reader-content").querySelector(".editor-note").textContent = message;
+      } catch (error) { note.textContent = error.message; }
+      finally { if (control) control.disabled = false; }
+    }
+    const group = text("div", "", "segmented"); group.setAttribute("role", "group"); group.setAttribute("aria-labelledby", heading.id);
+    const until = document.createElement("input"); until.type = "datetime-local"; until.required = true;
+    if (email.snoozed_until) until.value = localInput(email.snoozed_until);
+    const snooze = text("form", "", "snooze-form"); snooze.hidden = email.task !== "snoozed";
+    const snoozeButton = text("button", email.task === "snoozed" ? "Modifier le report" : "Reporter", "secondary-button"); snoozeButton.type = "submit";
+    snooze.append(field("Jusqu’au, heure de votre navigateur", until), snoozeButton);
+    snooze.addEventListener("input", () => { snooze.dataset.dirty = "true"; });
+    snooze.addEventListener("submit", event => {
+      event.preventDefault();
+      if (!until.value) { note.textContent = "Choisissez une date de report."; return; }
+      save({ task: "snoozed", snoozed_until: new Date(until.value).toISOString() }, "Message reporté.", snoozeButton);
+    });
+    for (const [label, value] of [["À faire", "todo"], ["Traité", "done"], ["Reporté…", "snoozed"]]) {
+      const choice = text("button", label); choice.type = "button"; choice.setAttribute("aria-pressed", String(email.task === value));
+      choice.addEventListener("click", () => {
+        if (value === "snoozed") {
+          snooze.hidden = false;
+          if (!until.value) { const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(8, 0, 0, 0); until.value = localInput(tomorrow); }
+          until.focus(); return;
+        }
+        if (email.task === value) { snooze.hidden = true; return; }
+        save({ task: value, snoozed_until: null }, value === "done" ? "Marqué comme traité." : "Remis à faire.", choice);
+      });
+      group.append(choice);
+    }
+    if (email.task === "snoozed" && email.snoozed_until) note.textContent = `Reporté jusqu’au ${new Date(email.snoozed_until).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" })}.`;
     const category = document.createElement("input"); category.value = email.correction.category || ""; category.maxLength = 100;
     const priority = document.createElement("input"); priority.type = "number"; priority.min = 0; priority.max = 100; priority.value = email.correction.priority ?? "";
-    const task = document.createElement("select");
-    for (const [label, value] of [["À faire", "todo"], ["Traité", "done"], ["Reporté", "snoozed"]]) task.add(new Option(label, value));
-    task.value = email.task;
-    const until = document.createElement("input"); until.type = "datetime-local";
-    if (email.snoozed_until) { const date = new Date(email.snoozed_until); until.value = new Date(date - date.getTimezoneOffset() * 60000).toISOString().slice(0,16); }
-    const snooze = field("Reporter jusqu’au, heure de votre navigateur", until); snooze.hidden = task.value !== "snoozed";
-    task.addEventListener("change", () => { snooze.hidden = task.value !== "snoozed"; });
-    const corrections = document.createElement("details"); corrections.append(text("summary", "Corriger le classement"));
-    corrections.append(field("Ma catégorie, facultatif", category), field("Ma priorité / 100, facultatif", priority));
-    const reset = text("button", "Retirer mes corrections", "text-button"); reset.type = "button";
-    reset.addEventListener("click", () => { category.value = ""; priority.value = ""; form.dataset.dirty = "true"; note.textContent = "Enregistrez pour retirer les corrections."; });
-    corrections.append(reset);
-    const save = text("button", "Enregistrer", "primary-button"); save.type = "submit";
-    const cancel = text("button", "Annuler", "secondary-button"); cancel.type = "button";
-    cancel.addEventListener("click", () => renderReader(email, true));
-    const actions = text("div", "", "editor-actions"); actions.append(save,cancel);
-    const note = text("p", "Le suivi reste dans Mailaya. Aucun mail n’est modifié.", "editor-note"); note.setAttribute("role", "status");
-    form.append(text("h3", "Mon suivi"),field("Statut personnel",task),snooze,corrections,actions,note);
-    form.addEventListener("input", () => { form.dataset.dirty = "true"; note.textContent = "Modifications non enregistrées."; });
-    form.addEventListener("submit", async event => {
-      event.preventDefault(); save.disabled = true;
-      try {
-        if (task.value === "snoozed" && !until.value) throw new Error("Choisissez une date de report.");
-        await request(`/messages/${email.id}`,json("PUT",{category:category.value.trim()||null,priority:priority.value===""?null:Number(priority.value),task:task.value,snoozed_until:task.value==="snoozed"?new Date(until.value).toISOString():null}));
-        form.dataset.dirty = "false";
-        w.readerEmail = await request(`/messages/${email.id}`);
-        await search(); renderReader(w.readerEmail,true);
-        $("workspace-note").textContent = "Suivi enregistré. La prédiction initiale est conservée.";
-      } catch (error) { note.textContent = error.message; } finally { save.disabled = false; }
+    const corrections = document.createElement("details"); corrections.className = "correction-details";
+    const correctionForm = text("form", "", "correction-form");
+    const saveCorrection = text("button", "Enregistrer la correction", "secondary-button"); saveCorrection.type = "submit";
+    const cancel = text("button", "Annuler", "text-button"); cancel.type = "button";
+    cancel.addEventListener("click", () => { category.value = email.correction.category || ""; priority.value = email.correction.priority ?? ""; correctionForm.dataset.dirty = "false"; note.textContent = "Modifications annulées."; });
+    const actions = text("div", "", "editor-actions"); actions.append(saveCorrection, cancel);
+    if (email.correction.category || email.correction.priority != null) {
+      const reset = text("button", "Retirer mes corrections", "text-button"); reset.type = "button";
+      reset.addEventListener("click", () => save({ category: null, priority: null }, "Corrections retirées. La prédiction du modèle s’applique.", reset));
+      actions.append(reset);
+    }
+    correctionForm.append(field("Ma catégorie, facultatif", category), field("Ma priorité / 100, facultatif", priority), actions);
+    correctionForm.addEventListener("input", () => { correctionForm.dataset.dirty = "true"; note.textContent = "Correction non enregistrée."; });
+    correctionForm.addEventListener("submit", event => {
+      event.preventDefault();
+      save({ category: category.value.trim() || null, priority: priority.value === "" ? null : Number(priority.value) }, "Correction enregistrée. La prédiction initiale est conservée.", saveCorrection);
     });
-    return form;
+    corrections.append(text("summary", "Corriger le classement"), correctionForm);
+    section.append(heading, group, snooze, note, corrections);
+    return section;
   }
-  function readerDirty() { return Boolean($("reader-content").querySelector('.mail-editor[data-dirty="true"]')); }
+  function readerDirty() { return Boolean($("reader-content").querySelector('form[data-dirty="true"]')); }
   function renderReader(email, force=false) {
     if (!email) return;
     if (!force && readerDirty()) return;
     const content = $("reader-content"); content.replaceChildren();
     content.append(text("div",email.sender_name,"sender-name"),text("h2",email.subject,"reader-heading"),text("p",`${email.sender_address} · ${new Date(email.received_at).toLocaleString("fr-FR")}`,"reader-meta"));
-    if (email.status === "complete") content.append(text("p",`${email.effective_category} · Priorité ${priorityLabel(email.effective_priority || 0).label.toLocaleLowerCase("fr-FR")}${email.needs_review ? " · À vérifier" : ""}`,"reader-classification"));
+    if (email.status === "complete") {
+      const tags = text("p", "", "reader-classification"), level = priorityLabel(email.effective_priority || 0);
+      const priorityTag = text("span", "Priorité " + level.label.toLocaleLowerCase("fr-FR"), "priority-label"); priorityTag.dataset.level = level.level;
+      tags.append(text("span", email.effective_category, "tag"), priorityTag);
+      tags.append(...signalNodes(email));
+      if (email.needs_review) tags.append(text("span", "À vérifier", "review-label"));
+      if (email.decision_source !== "model") tags.append(text("span", email.decision_source === "manual" ? "Corrigé" : "Règle", "review-label"));
+      content.append(tags);
+    }
     content.append(text("p",email.body_preview,"mail-preview"));
     if (email.status === "complete") content.append(editor(email));
     if (email.error) content.append(text("p",email.error));
@@ -155,17 +199,28 @@
       const row=document.createElement("tr"); row.dataset.status=email.status; row.dataset.selected=String(w.selectedEmail===email.id);
       const message=text("div","");
       const subject=text("button",email.subject,"mail-subject"); subject.type="button"; subject.setAttribute("aria-expanded",String(w.selectedEmail===email.id)); subject.setAttribute("aria-controls","message-reader"); subject.addEventListener("click",()=>openReader(email));
-      message.append(text("div",email.sender_name,"sender-name"),subject,text("div",email.body_preview.slice(0,120),"preview"));
+      const line=text("div","","mail-line"), time=text("time",shortDate(email.received_at),"mail-date"); time.dateTime=email.received_at; time.title=new Date(email.received_at).toLocaleString("fr-FR");
+      line.append(text("span",email.sender_name,"sender-name"),time);
+      message.append(line,subject,text("div",email.body_preview.slice(0,140),"preview"));
       if(email.conversation_count) message.append(text("small",`${email.conversation_count} messages`));
       const category=text("div",email.effective_category||(email.status==="failed"?"Échec":"En attente"));
       if(email.needs_review) category.append(text("small","À vérifier"));
       if(email.decision_source!=="model") category.append(text("small",email.decision_source==="manual"?"Corrigé":"Règle"));
       const priority=priorityLabel(email.effective_priority||0), priorityNode=text("span",priority.label,"priority-label"); priorityNode.dataset.level=priority.level; priorityNode.title=`${email.effective_priority||0}/100`;
-      const status=text("span",({todo:"À faire",done:"Traité",snoozed:"Reporté"})[email.task],"task-label"); status.dataset.task=email.task;
-      row.append(makeCell(message,"message-cell"),makeCell(category,"category-cell"),makeCell(priorityNode),makeCell(status)); tbody.append(row);
+      const signals=text("div","","signal-cell"); signals.append(priorityNode); if(email.status==="complete") signals.append(...signalNodes(email));
+      row.dataset.spam=String(email.status==="complete"&&(email.spam_score||0)>=SPAM_THRESHOLD);
+      const status=email.task==="todo"?text("span","","task-label"):text("span",({done:"Traité",snoozed:"Reporté"})[email.task],"task-label"); status.dataset.task=email.task;
+      if(email.task==="todo") status.append(text("span","À faire","sr-only"));
+      row.dataset.task=email.task; row.addEventListener("click",event=>{ if(!event.target.closest("button,a")) openReader(email); });
+      row.append(makeCell(message,"message-cell"),makeCell(category,"category-cell"),makeCell(signals),makeCell(status)); tbody.append(row);
     }
     if(w.selectedEmail) renderReader(w.emails.find(e=>e.id===w.selectedEmail)||w.readerEmail);
     return true;
+  }
+  function shortDate(value) {
+    const date = new Date(value), now = new Date();
+    if (date.toDateString() === now.toDateString()) return date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+    return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short", ...(date.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}) });
   }
   function fillOptions() {
     const value = profile()?.options;
@@ -195,7 +250,8 @@
       $(id).value=[...$(id).options].some(o=>o.value===old)?old:"0";
     }
     select("feature-connection_id", w.data.connections.map(c => [`${c.name} · ${c.model}`, c.id]), "Aucune");
-    select("saved-view", w.data.views.map(v => [v.name, v.id]), "Vues favorites");
+    select("saved-view", w.data.views.map(v => [v.name, v.id]), w.data.views.length ? "Choisir une vue" : "Aucune vue enregistrée");
+    $("delete-view").hidden = !$("saved-view").value;
     select("run-history", w.data.history.map(r => [`#${r.id} · ${r.model_backend === "laya-pytorch" ? "LAYA" : "Julia"} · ${{complete:"Terminé",paused:"En pause",failed:"Échec",running:"En cours",queued:"En file",fetching:"Importation",empty:"Vide"}[r.status] || r.status} · ${r.processed}/${r.total} messages`, r.id]), "Dernière analyse");
     if (!w.dirty) fillOptions();
     const connections = $("llm-connections"); connections.replaceChildren();
@@ -328,13 +384,13 @@
   }
   window.MailayaWorkspace = { renderRows: rows, refresh, session, reset, newConnection() { w.editingConnection=null; $("connection-form").reset(); $("cancel-connection").hidden=false; } };
   $("close-reader").addEventListener("click",closeReader);
-  $("clear-filters").addEventListener("click",()=>action(null,"workspace-note",async()=>{applyFilters({}); await search(); $("workspace-note").textContent="Recherche réinitialisée.";}));
+  $("clear-filters").addEventListener("click",()=>action(null,"workspace-note",async()=>{applyFilters({}); await search();}));
   $("brief-account").addEventListener("change",()=>action(null,"workspace-note",async()=>{w.briefScope=null; window.MailayaUI?.update(w.data); await loadBriefHistory();}));
   $("natural-account").addEventListener("change",()=>window.MailayaUI?.update(w.data));
   $("rule-account").addEventListener("change",()=>renderSettings());
-  $("search-form").addEventListener("submit", e => { e.preventDefault(); $("natural-result").textContent=""; w.offset = 0; w.conversation = ""; w.demoOnly = false; action(null, "workspace-note", async () => { await search(); $("workspace-note").textContent = "Filtres appliqués aux messages importés."; }); });
-  for (const [id, todo, review] of [["view-all", false, false], ["view-todo", true, false], ["view-review", false, true]]) $(id).addEventListener("click", () => action($(id), "workspace-note", async () => { w.todo = todo; w.review = review; w.offset = 0; tabs(); await search(); $("workspace-note").textContent = review ? "À vérifier : seuil heuristique, pas une confiance calibrée." : "Vue appliquée."; }));
-  for (const [id, delta] of [["previous-page", -50], ["next-page", 50]]) $(id).addEventListener("click", () => action($(id), "workspace-note", async () => { w.offset = Math.max(0, w.offset + delta); await search(); $("workspace-note").textContent = "Page chargée."; }));
+  $("search-form").addEventListener("submit", e => { e.preventDefault(); $("natural-result").textContent=""; w.offset = 0; w.conversation = ""; w.demoOnly = false; action(null, "workspace-note", async () => { await search(); $("search-form").querySelector(".advanced-filters").open = false; }); });
+  for (const [id, todo, review] of [["view-all", false, false], ["view-todo", true, false], ["view-review", false, true]]) $(id).addEventListener("click", () => action($(id), "workspace-note", async () => { w.todo = todo; w.review = review; w.offset = 0; tabs(); await search(); if (review) $("workspace-note").textContent = "À vérifier : seuil heuristique, pas une confiance calibrée."; }));
+  for (const [id, delta] of [["previous-page", -50], ["next-page", 50]]) $(id).addEventListener("click", () => action($(id), "workspace-note", async () => { w.offset = Math.max(0, w.offset + delta); await search(); }));
   $("features-form").addEventListener("input", () => { w.dirty = true; locationCopy(); });
   $("feature-account").addEventListener("change", () => {
     if (w.dirty) { $("feature-account").value = String(w.featureScope); $("features-note").textContent = "Enregistrez ou annulez vos modifications avant de changer de boîte."; return; }
@@ -380,7 +436,7 @@
     const name = $("view-name").value.trim(); if (!name) throw new Error("Donnez un nom à la vue.");
     await request("/views", json("POST", { name, filters: { ...filters(), offset: 0 } })); await refresh(null, state.generation, true); $("workspace-note").textContent = "Vue enregistrée dans votre compte.";
   }));
-  $("saved-view").addEventListener("change", () => action(null, "workspace-note", async () => { const view = w.data.views.find(v => v.id === Number($("saved-view").value)); if (view) { applyFilters(view.filters); await search(); $("workspace-note").textContent = `Vue « ${view.name} » appliquée.`; } }));
+  $("saved-view").addEventListener("change", () => action(null, "workspace-note", async () => { $("delete-view").hidden = !$("saved-view").value; const view = w.data.views.find(v => v.id === Number($("saved-view").value)); if (view) { applyFilters(view.filters); await search(); $("workspace-note").textContent = `Vue « ${view.name} » appliquée.`; } }));
   $("delete-view").addEventListener("click", () => action($("delete-view"), "workspace-note", async () => { const id = $("saved-view").value; if (!id) throw new Error("Choisissez une vue à supprimer."); await request(`/views/${id}`, { method: "DELETE" }); await refresh(null, state.generation, true); $("workspace-note").textContent = "Vue supprimée."; }));
   $("run-history").addEventListener("change", () => action(null, "workspace-note", async () => { w.runId = Number($("run-history").value) || null; w.offset = 0; renderSettings(); await search(); if (w.runId && w.data.history.find(r => r.id === w.runId)?.reference_run_id) await renderComparison(w.runId); else $("comparison-panel").hidden = true; $("workspace-note").textContent = w.runId ? `Historique de l’analyse #${w.runId}.` : "Historique personnel, dernier résultat de chaque message."; }));
   $("compare-models").addEventListener("click", () => action($("compare-models"), "workspace-note", async () => { const id = w.runId || state.dashboard?.run?.id; if (!id) throw new Error("Choisissez une analyse terminée."); const result = await request(`/runs/${id}/compare`, { method: "POST" }); w.runId = result.run_id; await loadDashboard(); await renderComparison(result.run_id); $("workspace-note").textContent = "Comparaison lancée sur le même lot. Résultats mis à jour pendant l’analyse."; }));

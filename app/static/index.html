@@ -8,10 +8,10 @@
     <meta name="theme-color" content="#663052">
     <title>Mailaya</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23663052'/%3E%3Cpath d='M15 46V18h7l10 13 10-13h7v28h-7V29L32 41 22 29v17z' fill='%23f6b792'/%3E%3C/svg%3E">
-    <link rel="stylesheet" href="__MAILAYA_ROOT__/static/app.css?v=workspace-9">
-    <script src="__MAILAYA_ROOT__/static/app.js?v=workspace-9" defer></script>
-    <script src="__MAILAYA_ROOT__/static/workspace.js?v=workspace-9" defer></script>
-    <script src="__MAILAYA_ROOT__/static/ui.js?v=workspace-9" defer></script>
+    <link rel="stylesheet" href="__MAILAYA_ROOT__/static/app.css?v=workspace-11">
+    <script src="__MAILAYA_ROOT__/static/app.js?v=workspace-11" defer></script>
+    <script src="__MAILAYA_ROOT__/static/workspace.js?v=workspace-11" defer></script>
+    <script src="__MAILAYA_ROOT__/static/ui.js?v=workspace-11" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main-content">Aller au contenu</a>
@@ -24,30 +24,29 @@
           <button type="button" data-page="analyses"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V4M4 20h16M9 16v-5M14 16V7M19 16v-8"/></svg>Analyses<span id="analysis-nav-dot" hidden class="status-dot" aria-label="Analyse active"></span></button>
           <button type="button" data-page="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="16" cy="17" r="3"/></svg>Paramètres</button>
         </nav>
-        <div class="rail-bottom"><span class="local-label"><span class="status-dot"></span>Lecture seule</span><p>Votre suivi reste dans Mailaya.<br>Vos mails restent dans votre boîte.</p><a href="__MAILAYA_ROOT__/guide">Guide &amp; installation ↗</a></div>
+        <div class="rail-bottom"><a class="guide-link" href="__MAILAYA_ROOT__/guide">Guide et installation</a><p class="local-label" title="Mailaya ne déplace, n’envoie ni ne marque aucun mail."><span class="status-dot" aria-hidden="true"></span>Lecture seule</p><details class="profile-menu"><summary><span class="sr-only">Compte : </span><span id="session-badge">Démonstration</span></summary><div><button type="button" data-open-settings="account">Compte et connexion</button><a href="__MAILAYA_ROOT__/guide">Guide et installation</a><button type="button" id="logout" hidden>Se déconnecter</button></div></details></div>
       </aside>
       <div class="app-body">
-        <header class="app-topbar"><span id="page-context">Votre espace de tri</span><details class="profile-menu"><summary id="session-badge">Démonstration</summary><div><button type="button" data-open-settings="account">Compte et connexion</button><a href="__MAILAYA_ROOT__/guide">Guide et installation</a><button type="button" id="logout" hidden>Se déconnecter</button></div></details></header>
         <main id="main-content" tabindex="-1">
           <section class="page" id="page-messages" data-page-panel="messages" aria-labelledby="results-heading">
-            <div class="page-heading"><div><p class="eyebrow">VOTRE BOÎTE DE TRI</p><h1 id="results-heading">Messages</h1><p id="results-summary">Retrouvez ce qui compte et ce qui reste à faire.</p></div><button type="button" class="primary-button" data-go="analyses">Analyser des messages <span aria-hidden="true">↗</span></button></div>
+            <div class="page-heading compact"><div><h1 id="results-heading">Messages</h1><p id="results-summary">Retrouvez ce qui compte et ce qui reste à faire.</p></div><button type="button" class="secondary-button" data-go="analyses">Nouvelle analyse</button></div>
             <section id="results" class="results" aria-label="Liste des messages">
               <label class="filter-control" id="public-category"><span>Catégorie</span><select id="category-filter"><option value="all">Toutes les catégories</option></select></label>
               __TRIAGE__
-              <div class="mail-workspace" id="mail-workspace"><div class="message-list"><div class="table-scroll"><table class="mail-table"><thead><tr><th scope="col">Message</th><th scope="col">Catégorie</th><th scope="col">Priorité</th><th scope="col">Suivi</th></tr></thead><tbody id="mail-rows"></tbody></table>
+              <div class="mail-workspace" id="mail-workspace"><div class="message-list"><div class="table-scroll"><table class="mail-table"><thead><tr><th scope="col">Message</th><th scope="col">Catégorie</th><th scope="col">Priorité et signaux</th><th scope="col">Suivi</th></tr></thead><tbody id="mail-rows"></tbody></table>
                 <div class="empty-state" id="empty-state"><span class="empty-symbol" aria-hidden="true">✉</span><h2 id="empty-heading">Vos messages commencent ici</h2><p id="empty-copy">Analysez un échantillon pour découvrir le tri, puis connectez votre boîte mail.</p><button type="button" class="primary-button" data-go="analyses">Préparer une analyse</button></div>
               </div></div>
               <aside id="message-reader" class="message-reader" aria-label="Lecture du message" hidden><div class="reader-toolbar"><span>Aperçu du message</span><button type="button" id="close-reader" class="text-button">Fermer <span aria-hidden="true">×</span></button></div><div id="reader-content"></div></aside></div>
             </section>
           </section>
           <section class="page reading-page" id="page-brief" data-page-panel="brief" hidden aria-labelledby="brief-page-heading">
-            <div class="page-heading"><div><p class="eyebrow">LE POINT DU JOUR</p><h1 id="brief-page-heading">Brief quotidien</h1><p>Les demandes en attente, avec leurs messages sources.</p></div></div>
+            <div class="page-heading"><div><h1 id="brief-page-heading">Brief quotidien</h1><p>Les demandes en attente, avec leurs messages sources.</p></div></div>
             <div class="context-line"><label><span>Boîte concernée</span><select id="brief-account"><option value="0">Démonstration personnelle</option></select></label><label><span>Brief conservé</span><select id="brief-history"><option value="">Choisir un jour</option></select></label></div>
             <div id="brief-setup" class="empty-state"><span class="empty-symbol" aria-hidden="true">☷</span><h2>Un point quotidien, quand vous en avez besoin</h2><p>Activez le brief pour cette boîte. Il fonctionne sans LLM ; vous pourrez ajouter un résumé génératif ensuite.</p><button type="button" id="configure-brief" class="primary-button">Configurer ce brief</button></div>
             <div id="brief-slot"></div>
           </section>
           <section class="page" id="page-analyses" data-page-panel="analyses" hidden aria-labelledby="analyses-heading">
-            <div class="page-heading"><div><p class="eyebrow">IMPORTER ET CLASSER</p><h1 id="analyses-heading">Analyses</h1><p>Un lot à la fois. Les messages déjà importés restent accessibles.</p></div><button type="button" class="secondary-button" id="new-run">Nouvelle analyse</button></div>
+            <div class="page-heading"><div><h1 id="analyses-heading">Analyses</h1><p>Un lot à la fois. Les messages déjà importés restent accessibles.</p></div><button type="button" class="secondary-button" id="new-run">Nouvelle analyse</button></div>
             <div class="analysis-layout"><section class="analysis-form"><h2 id="execution-heading">Préparer une analyse</h2>        <form id="run-form">
           <div class="field-grid">
             <label>
@@ -127,7 +126,7 @@
             <section id="history-slot" class="history-section"></section><div id="comparison-slot"></div>
             <details class="data-management"><summary>Gestion des résultats</summary><p>Effacer retire les analyses de Mailaya, sans modifier votre messagerie. Les briefs et les réglages sont conservés.</p><button class="danger-button" id="clear-results" type="button">Effacer mes résultats</button><div id="clear-confirm" hidden><p>Cette suppression des résultats locaux est définitive.</p><button type="button" id="confirm-clear" class="danger-button">Confirmer la suppression</button><button type="button" id="cancel-clear" class="secondary-button">Conserver les résultats</button></div></details>
           </section>
-          <section class="page settings-page" id="page-settings" data-page-panel="settings" hidden aria-labelledby="settings-heading"><div class="page-heading"><div><p class="eyebrow">VOTRE APPLICATION</p><h1 id="settings-heading">Paramètres</h1><p>Connectez vos boîtes, puis choisissez les fonctions utiles.</p></div></div>
+          <section class="page settings-page" id="page-settings" data-page-panel="settings" hidden aria-labelledby="settings-heading"><div class="page-heading"><div><h1 id="settings-heading">Paramètres</h1><p>Connectez vos boîtes, puis choisissez les fonctions utiles.</p></div></div>
             <nav class="settings-nav" aria-label="Sections des paramètres"><button type="button" data-settings="mailboxes" aria-current="page">Boîtes mail</button><button type="button" data-settings="features">Fonctions par boîte</button><button type="button" data-settings="connections">Connexions IA</button><button type="button" data-settings="rules">Règles de tri</button><button type="button" data-settings="account">Mon compte</button></nav>
             <div id="settings-login-hint" class="inline-notice" hidden>Connectez-vous pour accéder à vos boîtes et réglages personnels. <button type="button" class="text-button" data-open-settings="account">Se connecter</button></div>
             <div id="settings-mailboxes" data-settings-panel="mailboxes">        <section class="settings-section" id="imap-panel" hidden>
